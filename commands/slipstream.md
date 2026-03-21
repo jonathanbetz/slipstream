@@ -1,31 +1,42 @@
 # /slipstream
 
-Show a dashboard of friction captured across all Claude Code sessions and recommend
+Show a dashboard of friction captured for the CURRENT PROJECT and recommend
 which focused commands to run.
+
+## Step 0: Determine current project
+
+Before reading any data:
+1. The current project path = the working directory where Claude Code is open (run `pwd` if needed).
+2. Project key = that path with every `/` replaced by `-`
+   (e.g. `/Users/alice/src/myapp` → `-Users-alice-src-myapp`).
+3. Per-project cursor = `~/.slipstream/cursors/<project-key>.json` (default `{}` if missing).
+4. Project sessions directory = `~/.claude/projects/<project-key>/`.
+
+All data in the steps below is SCOPED TO THE CURRENT PROJECT.
 
 ## Step 1: Read logs
 
 Read these files from ~/.slipstream/:
-- permissions.jsonl
-- compactions.jsonl
-- errors.jsonl
-- reads.jsonl
+- permissions.jsonl  — filter to entries where `.cwd` starts with the current project path
+- compactions.jsonl  — same filter
+- errors.jsonl       — same filter
+- reads.jsonl        — same filter
 - corrections-state.json (for analyzed_session_ids; default [])
 - memory-state.json (for analyzed_session_ids for the memory module; default [])
 - commands-state.json (for analyzed_session_ids for the commands module; default [])
-- .cursor.json (for last-review state and per-module line counts)
+- ~/.slipstream/cursors/<project-key>.json (per-project last-review timestamps)
 
-Count total lines in each jsonl file. Count distinct session_ids in each.
+Count filtered entries in each jsonl file. Count distinct session_ids among filtered entries.
 
-Count unanalyzed sessions per transcript-scanning module by subtracting each module's
-analyzed_session_ids from the total list of *.jsonl files under ~/.claude/projects/:
+Count unanalyzed sessions per transcript-scanning module using ONLY sessions under
+`~/.claude/projects/<project-key>/`:
 - corrections-state.json → unanalyzed sessions for /slipstream-corrections
 - memory-state.json     → unanalyzed sessions for /slipstream-memory
 - commands-state.json   → unanalyzed sessions for /slipstream-commands
 
-"New since review" for each log module = current line count minus the line count stored
-in .cursor.json for that module (permissions_line_count, compactions_line_count,
-errors_line_count, reads_line_count). If no .cursor.json exists, treat stored counts as 0.
+"New since review" = count of filtered entries (matching project cwd) with `.timestamp`
+greater than the corresponding `last_*_review` timestamp in the per-project cursor.
+If no cursor exists, all filtered entries are "new".
 
 ## Step 2: Show dashboard
 

@@ -9,11 +9,28 @@ memory files.
 Uses `~/.slipstream/memory-state.json` with format `{"analyzed_session_ids": [...]}`.
 Cumulative — never overwrite, always merge newly analyzed IDs.
 
+## Step 0: Determine current project
+
+Before reading any data:
+1. Current project path = the working directory where Claude Code is open (`pwd`).
+2. Project key = that path with every `/` replaced by `-`.
+3. Per-project cursor = `~/.slipstream/cursors/<project-key>.json` (default `{}` if missing).
+4. Project sessions directory = `~/.claude/projects/<project-key>/`.
+
+All analysis below is SCOPED TO THE CURRENT PROJECT only.
+
 ## Mini-dashboard
 
-1. List all `*.jsonl` files under `~/.claude/projects/`.
+1. List all `*.jsonl` files under `~/.claude/projects/<project-key>/` only (not all projects) and collect their stems.
 2. Read `analyzed_session_ids` from `~/.slipstream/memory-state.json` (default `[]`).
-3. Compute unanalyzed count = total sessions minus analyzed count.
+3. Compute unanalyzed sessions using a set-difference approach:
+   ```bash
+   ANALYZED=$(jq -r '.analyzed_session_ids[]' ~/.slipstream/memory-state.json 2>/dev/null | sort)
+   ALL=$(find ~/.claude/projects -name '*.jsonl' | xargs -I{} basename {} .jsonl | sort)
+   UNANALYZED=$(comm -23 <(echo "$ALL") <(echo "$ANALYZED") | wc -l | tr -d ' ')
+   ```
+   (Use `comm -23` on sorted lists — O(n+m) — rather than checking each stem against the
+   full array, which is O(n×m).)
 4. Print:
    ```
    Memory module
@@ -105,6 +122,15 @@ If no new facts were found, say so and stop.
 
 ## Step 5: Apply
 
+**Before modifying any file**, create a timestamped backup in `~/.slipstream/backups/`:
+```bash
+mkdir -p ~/.slipstream/backups
+TS=$(date -u +"%Y%m%dT%H%M%SZ")
+# For any existing memory file being updated:
+cp "<target-memory-file>" ~/.slipstream/backups/$(basename "<target-memory-file>").${TS}.bak
+```
+Report the backup path so the user knows where to find it.
+
 For each approved entry:
 
 1. Determine the memory directory (the directory containing MEMORY.md, or
@@ -128,6 +154,20 @@ For each approved entry:
 
 5. For updates to existing files: append the new fact with a brief context note.
 
+## Step 5b: Record audit trail
+
+For each file written or modified, append one line to `~/.slipstream/applied.jsonl`:
+```bash
+jq -cn \
+  --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+  --arg cmd "slipstream-memory" \
+  --arg action "<memory-file-created|memory-file-updated>" \
+  --arg target "<absolute path of memory file>" \
+  --arg detail "<e.g. 'Created user_role.md from 4 sessions'>" \
+  '{timestamp: $ts, command: $cmd, action: $action, target: $target, detail: $detail}' \
+  >> ~/.slipstream/applied.jsonl
+```
+
 ## Step 6: Update state
 
 After applying all approved entries:
@@ -137,7 +177,7 @@ After applying all approved entries:
 2. Merge the newly analyzed session IDs into `analyzed_session_ids` — append, never
    replace.
 3. Write the merged object back to `~/.slipstream/memory-state.json`.
-4. Read `~/.slipstream/.cursor.json` (or `{}` if missing). Merge in:
+4. Read `~/.slipstream/cursors/<project-key>.json` (or `{}` if missing). Merge in:
    `{"last_memory_review": "<ISO 8601 timestamp of now>"}`. Write it back.
 
 ## Report

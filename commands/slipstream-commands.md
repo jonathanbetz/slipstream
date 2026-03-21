@@ -8,11 +8,28 @@ that would benefit from a slash command. Propose new `.md` command files.
 Uses `~/.slipstream/commands-state.json` with format `{"analyzed_session_ids": [...]}`.
 Cumulative — never overwrite, always merge newly analyzed IDs.
 
+## Step 0: Determine current project
+
+Before reading any data:
+1. Current project path = the working directory where Claude Code is open (`pwd`).
+2. Project key = that path with every `/` replaced by `-`.
+3. Per-project cursor = `~/.slipstream/cursors/<project-key>.json` (default `{}` if missing).
+4. Project sessions directory = `~/.claude/projects/<project-key>/`.
+
+All analysis below is SCOPED TO THE CURRENT PROJECT only.
+
 ## Mini-dashboard
 
-1. List all `*.jsonl` files under `~/.claude/projects/`.
+1. List all `*.jsonl` files under `~/.claude/projects/<project-key>/` only (not all projects) and collect their stems.
 2. Read `analyzed_session_ids` from `~/.slipstream/commands-state.json` (default `[]`).
-3. Compute unanalyzed count = total sessions minus analyzed count.
+3. Compute unanalyzed sessions using a set-difference approach:
+   ```bash
+   ANALYZED=$(jq -r '.analyzed_session_ids[]' ~/.slipstream/commands-state.json 2>/dev/null | sort)
+   ALL=$(find ~/.claude/projects -name '*.jsonl' | xargs -I{} basename {} .jsonl | sort)
+   UNANALYZED=$(comm -23 <(echo "$ALL") <(echo "$ANALYZED") | wc -l | tr -d ' ')
+   ```
+   (Use `comm -23` on sorted lists — O(n+m) — rather than checking each stem against the
+   full array, which is O(n×m).)
 4. Print:
    ```
    Commands module
@@ -107,6 +124,20 @@ Write each approved command file. Begin each file with a header comment:
 Follow with the full command content using the same structure as existing commands in
 `~/.claude/commands/`: a `#` heading, a short description paragraph, and numbered steps.
 
+## Step 6b: Record audit trail
+
+For each command file written, append one line to `~/.slipstream/applied.jsonl`:
+```bash
+jq -cn \
+  --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+  --arg cmd "slipstream-commands" \
+  --arg action "command-file-created" \
+  --arg target "<absolute path of command .md file>" \
+  --arg detail "<e.g. 'Created /create-pr from 6 sessions across 4 projects'>" \
+  '{timestamp: $ts, command: $cmd, action: $action, target: $target, detail: $detail}' \
+  >> ~/.slipstream/applied.jsonl
+```
+
 ## Step 7: Update state
 
 After writing all approved files:
@@ -116,7 +147,7 @@ After writing all approved files:
 2. Merge the newly analyzed session IDs into `analyzed_session_ids` — append, never
    replace.
 3. Write the merged object back to `~/.slipstream/commands-state.json`.
-4. Read `~/.slipstream/.cursor.json` (or `{}` if missing). Merge in:
+4. Read `~/.slipstream/cursors/<project-key>.json` (or `{}` if missing). Merge in:
    `{"last_commands_review": "<ISO 8601 timestamp of now>"}`. Write it back.
 
 ## Report

@@ -5,16 +5,34 @@ patterns, and generate concrete rules. Present a plan, wait for approval, then a
 
 ---
 
+## Step 0: Determine current project
+
+Before reading any data:
+1. Current project path = the working directory where Claude Code is open (`pwd`).
+2. Project key = that path with every `/` replaced by `-`
+   (e.g. `/Users/alice/src/myapp` → `-Users-alice-src-myapp`).
+3. Per-project cursor = `~/.slipstream/cursors/<project-key>.json` (default `{}` if missing).
+4. Project sessions directory = `~/.claude/projects/<project-key>/`.
+
+All analysis below is SCOPED TO THE CURRENT PROJECT only.
+
 ## Step 1: Mini-dashboard
 
-- List all *.jsonl files under ~/.claude/projects/
-- Load ~/.slipstream/corrections-state.json — get analyzed_session_ids (default [])
-- Count unanalyzed sessions: files whose stem (filename without extension) is NOT in
-  analyzed_session_ids
+- List all *.jsonl files under `~/.claude/projects/<project-key>/` only (not all projects) and collect their stems (filename
+  without extension).
+- Load ~/.slipstream/corrections-state.json — get analyzed_session_ids (default []).
+- Compute unanalyzed sessions efficiently using a set-difference approach:
+  ```bash
+  ANALYZED=$(jq -r '.analyzed_session_ids[]' ~/.slipstream/corrections-state.json 2>/dev/null | sort)
+  ALL=$(find ~/.claude/projects -name '*.jsonl' | xargs -I{} basename {} .jsonl | sort)
+  UNANALYZED=$(comm -23 <(echo "$ALL") <(echo "$ANALYZED") | wc -l | tr -d ' ')
+  ```
+  (Use `comm -23` on sorted lists — O(n+m) — rather than iterating each stem against the
+  full array, which is O(n×m).)
 - Show:
   - Total session files found
   - Unanalyzed count
-  - Projects covered (distinct directory names from the path under ~/.claude/projects/)
+  - Projects covered (distinct cwd paths relative to $HOME from the path under ~/.claude/projects/)
 
 If no unanalyzed sessions exist, say:
 
@@ -45,7 +63,8 @@ with a role field ("user" or "assistant") and content.
   the mark
 
 For each correction found, record:
-- project: derived from the directory path under ~/.claude/projects/
+- project: cwd path relative to $HOME (e.g. "src/myapp"), derived from the directory
+  path under ~/.claude/projects/. Never use basename alone — use the full relative path.
 - session_id: the transcript filename without extension
 - assistant_turn: the assistant message that was corrected (first 300 chars)
 - correction: the user's correction turn (first 300 chars)
@@ -104,6 +123,15 @@ Wait for user response.
 
 ## Step 4: Apply
 
+**Before modifying any file**, create a timestamped backup in `~/.slipstream/backups/`:
+```bash
+mkdir -p ~/.slipstream/backups
+TS=$(date -u +"%Y%m%dT%H%M%SZ")
+# For each CLAUDE.md being modified:
+cp "<target-CLAUDE.md>" ~/.slipstream/backups/CLAUDE.md.${TS}.bak
+```
+Report the backup path so the user knows where to find it.
+
 **Rules files (.claude/rules/<slug>.md):**
 - Write the file to the proposed path (create .claude/rules/ directory if needed)
 - Include a header: `# Learned from N corrections across M sessions`
@@ -120,9 +148,23 @@ Wait for user response.
 
 ---
 
+## Step 4b: Record audit trail
+
+For each file written or modified, append one line to `~/.slipstream/applied.jsonl`:
+```bash
+jq -cn \
+  --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+  --arg cmd "slipstream-corrections" \
+  --arg action "<rule-created|claude-md-update>" \
+  --arg target "<absolute path of file written>" \
+  --arg detail "<brief description, e.g. 'Added no-scope-creep rule from 3 sessions'>" \
+  '{timestamp: $ts, command: $cmd, action: $action, target: $target, detail: $detail}' \
+  >> ~/.slipstream/applied.jsonl
+```
+
 ## Step 5: Update state
 
-**Update cursor** — merge into ~/.slipstream/.cursor.json using jq, preserve all other fields:
+**Update cursor** — merge into `~/.slipstream/cursors/<project-key>.json` using jq, preserve all other fields:
 
 ```json
 {"last_corrections_review": "<ISO 8601 now>"}

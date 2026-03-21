@@ -5,15 +5,27 @@ reusable scripts. Present a ranked plan, wait for approval, then apply.
 
 ---
 
+## Step 0: Determine current project
+
+Before reading any data:
+1. Current project path = the working directory where Claude Code is open (`pwd`).
+2. Project key = that path with every `/` replaced by `-`
+   (e.g. `/Users/alice/src/myapp` → `-Users-alice-src-myapp`).
+3. Per-project cursor = `~/.slipstream/cursors/<project-key>.json` (default `{}` if missing).
+4. Project sessions directory = `~/.claude/projects/<project-key>/`.
+
+All analysis below is SCOPED TO THE CURRENT PROJECT only.
+
 ## Step 1: Mini-dashboard
 
-Load ~/.slipstream/permissions.jsonl. Load ~/.slipstream/.cursor.json.
+Load ~/.slipstream/permissions.jsonl filtered to entries where `.cwd` starts with the
+current project path. Load the per-project cursor.
 
 Show:
-- Total entries (line count)
-- New since last review (current count minus permissions_line_count in .cursor.json; 0 if missing)
-- Distinct projects (distinct meaningful directory names from the cwd field)
-- Date range (earliest and latest timestamp fields)
+- Total filtered entries (line count for current project)
+- New since last review: count of filtered entries with `.timestamp` > `last_permissions_review`
+  in per-project cursor (if no cursor, all entries are "new")
+- Date range (earliest and latest timestamp among filtered entries)
 
 If the file is empty or missing, say:
 
@@ -30,7 +42,9 @@ Run all three analyses before presenting anything.
 ### A. Allow-list candidates
 
 Group entries by {project, normalized_pattern}:
-- project = meaningful directory name from cwd (last non-trivial path component)
+- project = cwd path relative to $HOME (e.g. "src/myapp" from "/Users/alice/src/myapp").
+  Use the full relative path — never basename alone — to avoid collisions across projects
+  that share a directory name.
 - normalized_pattern = normalize Bash commands by stripping variable arguments:
   - Replace quoted strings, file paths, and version numbers with *
   - If a command varies across sessions in its arguments, append * to the base command
@@ -110,6 +124,15 @@ Wait for user response.
 
 ## Step 4: Apply
 
+**Before modifying any file**, create a timestamped backup in `~/.slipstream/backups/`:
+```bash
+mkdir -p ~/.slipstream/backups
+TS=$(date -u +"%Y%m%dT%H%M%SZ")
+cp ~/.claude/settings.json ~/.slipstream/backups/settings.json.${TS}.bak 2>/dev/null || true
+# For each project settings.json being modified, back it up similarly.
+```
+Report the backup path so the user knows where to find it.
+
 Work through approved items in this order:
 
 **Scripts first:**
@@ -133,22 +156,40 @@ Work through approved items in this order:
 
 ---
 
+## Step 4b: Record audit trail
+
+For each file written or modified, append one line to `~/.slipstream/applied.jsonl`:
+```bash
+jq -cn \
+  --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+  --arg cmd "slipstream-permissions" \
+  --arg action "<allow-list-add|claude-md-update|script-created>" \
+  --arg target "<absolute path of file modified>" \
+  --arg detail "<brief description of change>" \
+  '{timestamp: $ts, command: $cmd, action: $action, target: $target, detail: $detail}' \
+  >> ~/.slipstream/applied.jsonl
+```
+Append one entry per change. Never read or rewrite the file — append only.
+
 ## Step 5: Update cursor
 
-Merge into ~/.slipstream/.cursor.json using jq — preserve all other fields:
+Merge into the per-project cursor `~/.slipstream/cursors/<project-key>.json` using jq —
+preserve all other fields:
 
 ```json
-{"permissions_line_count": <current wc -l of permissions.jsonl>, "last_permissions_review": "<ISO 8601 now>"}
+{"last_permissions_review": "<ISO 8601 now>"}
 ```
 
 Example jq command:
 ```bash
-jq -s '.[0] * .[1]' ~/.slipstream/.cursor.json - <<< \
-  '{"permissions_line_count": N, "last_permissions_review": "2026-03-21T14:30:00Z"}' \
-  > /tmp/cursor.tmp && mv /tmp/cursor.tmp ~/.slipstream/.cursor.json
+CURSOR="$HOME/.slipstream/cursors/<project-key>.json"
+mkdir -p "$(dirname "$CURSOR")"
+jq -s '.[0] * .[1]' "$CURSOR" - <<< \
+  '{"last_permissions_review": "2026-03-21T14:30:00Z"}' \
+  > /tmp/cursor.tmp && mv /tmp/cursor.tmp "$CURSOR"
 ```
 
-If .cursor.json does not exist, create it with just these two fields.
+If the cursor does not exist, create it with just this field.
 
 ---
 

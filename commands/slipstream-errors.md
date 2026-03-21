@@ -5,15 +5,25 @@ plan, wait for approval, then apply.
 
 ---
 
+## Step 0: Determine current project
+
+Before reading any data:
+1. Current project path = the working directory where Claude Code is open (`pwd`).
+2. Project key = that path with every `/` replaced by `-`.
+3. Per-project cursor = `~/.slipstream/cursors/<project-key>.json` (default `{}` if missing).
+
+All analysis below is SCOPED TO THE CURRENT PROJECT only.
+
 ## Step 1: Mini-dashboard
 
-Load ~/.slipstream/errors.jsonl. Load ~/.slipstream/.cursor.json.
+Load ~/.slipstream/errors.jsonl filtered to entries where `.cwd` starts with the
+current project path. Load the per-project cursor.
 
 Show:
-- Total entries (line count)
-- New since last review (current count minus errors_line_count in .cursor.json; 0 if missing)
-- Distinct tools involved (distinct tool_name values)
-- Distinct projects (distinct meaningful directory names from the cwd field)
+- Total filtered entries (errors for this project)
+- New since last review: count of filtered entries with `.timestamp` > `last_errors_review`
+  in per-project cursor (if no cursor, all entries are "new")
+- Distinct tools involved (distinct tool_name values among filtered entries)
 
 If the file is empty or missing, say:
 
@@ -27,7 +37,9 @@ Stop here — do not proceed to analysis.
 ## Step 2: Analysis
 
 **Group by pattern:** Group entries by {project, tool_name, normalized_command}:
-- project = meaningful directory name from cwd (last non-trivial path component)
+- project = cwd path relative to $HOME (e.g. "src/myapp" from "/Users/alice/src/myapp").
+  Use the full relative path — never basename alone — to avoid collisions across projects
+  that share a directory name.
 - tool_name = the tool_name field from the log entry
 - normalized_command = for Bash failures, the executable and subcommand (e.g. "npm run e2e",
   not the full argument list); for other tools (Edit, Write, etc.), use tool_name alone
@@ -74,6 +86,14 @@ Wait for user response.
 
 ## Step 4: Apply
 
+**Before modifying any file**, create a timestamped backup in `~/.slipstream/backups/`:
+```bash
+mkdir -p ~/.slipstream/backups
+TS=$(date -u +"%Y%m%dT%H%M%SZ")
+cp "<target-CLAUDE.md>" ~/.slipstream/backups/CLAUDE.md.${TS}.bak
+```
+Report the backup path so the user knows where to find it.
+
 For each approved CLAUDE.md addition:
 - Load the target CLAUDE.md (create with minimal header if it doesn't exist)
 - Add under a `## Pre-flight checks` or `## Known issues` heading (create if needed;
@@ -85,15 +105,29 @@ For each approved CLAUDE.md addition:
 
 ---
 
-## Step 5: Update cursor
+## Step 4b: Record audit trail
 
-Merge into ~/.slipstream/.cursor.json using jq — preserve all other fields:
-
-```json
-{"errors_line_count": <current wc -l of errors.jsonl>, "last_errors_review": "<ISO 8601 now>"}
+For each file written or modified, append one line to `~/.slipstream/applied.jsonl`:
+```bash
+jq -cn \
+  --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+  --arg cmd "slipstream-errors" \
+  --arg action "claude-md-update" \
+  --arg target "<absolute path of CLAUDE.md modified>" \
+  --arg detail "<e.g. 'Added pre-flight note for npm run e2e'>" \
+  '{timestamp: $ts, command: $cmd, action: $action, target: $target, detail: $detail}' \
+  >> ~/.slipstream/applied.jsonl
 ```
 
-If .cursor.json does not exist, create it with just these two fields.
+## Step 5: Update cursor
+
+Merge into `~/.slipstream/cursors/<project-key>.json` using jq — preserve all other fields:
+
+```json
+{"last_errors_review": "<ISO 8601 now>"}
+```
+
+If the cursor does not exist, create it with just this field.
 
 ---
 

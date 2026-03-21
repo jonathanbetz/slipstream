@@ -1,25 +1,16 @@
 #!/bin/bash
 # slipstream-check-triggers.sh
-# Fires on Stop and SessionStart. Checks per-module thresholds and prints specific
-# commands to run when friction has accumulated enough to be worth reviewing.
+# Fires on Stop and SessionStart. Checks per-module thresholds for the CURRENT
+# PROJECT only and prints specific commands to run when friction has accumulated
+# enough to be worth reviewing.
 
 set -euo pipefail
 
 DATA_DIR="$HOME/.slipstream"
-CURSOR="$DATA_DIR/.cursor.json"
 
-# Per-module thresholds
-THRESHOLD_PERMISSIONS=5
-THRESHOLD_COMPACTIONS=3
-THRESHOLD_ERRORS=3
-THRESHOLD_READS=10
-THRESHOLD_CORRECTIONS=2
-THRESHOLD_MEMORY=2
-THRESHOLD_COMMANDS=3
-
-# Time-based threshold: if a module has any new data and last review was >7 days ago,
-# include it regardless of count.
-TIME_THRESHOLD_DAYS=7
+# Per-module thresholds — single source of truth
+# shellcheck source=slipstream-thresholds.sh
+. "$(dirname "$0")/slipstream-thresholds.sh"
 
 trap 'exit 0' ERR
 
@@ -27,15 +18,22 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 mkdir -p "$DATA_DIR"
 
-# ── Helper: count lines in a file ─────────────────────────────────────────────
-count_lines() {
-  local f="$1"
-  if [ -f "$f" ]; then
-    wc -l < "$f" | tr -d ' '
-  else
-    echo 0
-  fi
-}
+# ── Determine current project from hook stdin ──────────────────────────────
+INPUT="$(cat)"
+CWD="$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")"
+
+# If no cwd in event, fall back to process working directory
+[ -z "$CWD" ] && CWD="$(pwd)"
+
+# Encode project path the same way Claude Code does:
+# /Users/alice/src/myapp → -Users-alice-src-myapp
+PROJECT_KEY="$(printf '%s' "$CWD" | sed 's|/|-|g')"
+
+# Per-project cursor and session directory
+CURSOR="$DATA_DIR/cursors/${PROJECT_KEY}.json"
+PROJECT_SESSIONS_DIR="$HOME/.claude/projects/${PROJECT_KEY}"
+
+mkdir -p "$DATA_DIR/cursors"
 
 # ── Helper: days since an ISO 8601 timestamp (macOS + Linux portable) ─────────
 days_since() {
@@ -45,10 +43,8 @@ days_since() {
   now_epoch="$(date +%s)"
 
   if date -j -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s >/dev/null 2>&1; then
-    # macOS BSD date
     last_epoch="$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null || echo 0)"
   elif date -d "$ts" +%s >/dev/null 2>&1; then
-    # GNU date (Linux)
     last_epoch="$(date -d "$ts" +%s 2>/dev/null || echo 0)"
   else
     last_epoch=0
@@ -61,11 +57,23 @@ days_since() {
   fi
 }
 
-# ── Read cursor state ──────────────────────────────────────────────────────────
-LAST_PERMISSIONS=0
-LAST_COMPACTIONS=0
-LAST_ERRORS=0
-LAST_READS=0
+# ── Helper: count events for current project since a timestamp ────────────────
+# Usage: count_new <jsonl_file> <last_review_ts>
+count_new() {
+  local file="$1"
+  local last_ts="${2:-1970-01-01T00:00:00Z}"
+  if [ ! -f "$file" ]; then
+    echo 0
+    return
+  fi
+  jq -r \
+    --arg cwd "$CWD" \
+    --arg ts "$last_ts" \
+    'select((.cwd | startswith($cwd)) and .timestamp > $ts)' \
+    "$file" 2>/dev/null | wc -l | tr -d ' '
+}
+
+# ── Read per-project cursor ────────────────────────────────────────────────────
 LAST_PERMISSIONS_TS=""
 LAST_CONTEXT_TS=""
 LAST_ERRORS_TS=""
@@ -75,10 +83,6 @@ LAST_MEMORY_TS=""
 LAST_COMMANDS_TS=""
 
 if [ -f "$CURSOR" ]; then
-  LAST_PERMISSIONS="$(jq -r '.permissions_line_count // 0'    "$CURSOR")"
-  LAST_COMPACTIONS="$(jq -r '.compactions_line_count // 0'    "$CURSOR")"
-  LAST_ERRORS="$(jq -r      '.errors_line_count // 0'         "$CURSOR")"
-  LAST_READS="$(jq -r       '.reads_line_count // 0'          "$CURSOR")"
   LAST_PERMISSIONS_TS="$(jq -r '.last_permissions_review // ""'  "$CURSOR")"
   LAST_CONTEXT_TS="$(jq -r    '.last_context_review // ""'       "$CURSOR")"
   LAST_ERRORS_TS="$(jq -r     '.last_errors_review // ""'        "$CURSOR")"
@@ -88,52 +92,59 @@ if [ -f "$CURSOR" ]; then
   LAST_COMMANDS_TS="$(jq -r '.last_commands_review // ""'        "$CURSOR")"
 fi
 
-# ── Current line counts ────────────────────────────────────────────────────────
-CUR_PERMISSIONS="$(count_lines "$DATA_DIR/permissions.jsonl")"
-CUR_COMPACTIONS="$(count_lines "$DATA_DIR/compactions.jsonl")"
-CUR_ERRORS="$(count_lines      "$DATA_DIR/errors.jsonl")"
-CUR_READS="$(count_lines       "$DATA_DIR/reads.jsonl")"
+# ── New events since last review (project-filtered, timestamp-based) ──────────
+NEW_PERMISSIONS="$(count_new "$DATA_DIR/permissions.jsonl" "$LAST_PERMISSIONS_TS")"
+NEW_COMPACTIONS="$(count_new "$DATA_DIR/compactions.jsonl" "$LAST_CONTEXT_TS")"
+NEW_ERRORS="$(count_new      "$DATA_DIR/errors.jsonl"      "$LAST_ERRORS_TS")"
+NEW_READS="$(count_new       "$DATA_DIR/reads.jsonl"        "$LAST_READS_TS")"
 
-NEW_PERMISSIONS=$(( CUR_PERMISSIONS - LAST_PERMISSIONS ))
-NEW_COMPACTIONS=$(( CUR_COMPACTIONS - LAST_COMPACTIONS ))
-NEW_ERRORS=$(( CUR_ERRORS - LAST_ERRORS ))
-NEW_READS=$(( CUR_READS - LAST_READS ))
+# ── Unanalyzed sessions for current project ────────────────────────────────────
+TOTAL_SESSIONS=0
+if [ -d "$PROJECT_SESSIONS_DIR" ]; then
+  TOTAL_SESSIONS="$(find "$PROJECT_SESSIONS_DIR" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')"
+fi
 
-# Guard against negatives (e.g. log rotation)
-[ "$NEW_PERMISSIONS" -lt 0 ] && NEW_PERMISSIONS=0
-[ "$NEW_COMPACTIONS" -lt 0 ] && NEW_COMPACTIONS=0
-[ "$NEW_ERRORS" -lt 0 ]      && NEW_ERRORS=0
-[ "$NEW_READS" -lt 0 ]       && NEW_READS=0
-
-# ── Unanalyzed correction sessions ────────────────────────────────────────────
+# Corrections
 CORRECTIONS_STATE="$DATA_DIR/corrections-state.json"
 ANALYZED_COUNT=0
 if [ -f "$CORRECTIONS_STATE" ]; then
-  ANALYZED_COUNT="$(jq -r '.analyzed_session_ids | length' "$CORRECTIONS_STATE" 2>/dev/null || echo 0)"
+  # Count how many of this project's sessions are already analyzed
+  if [ -d "$PROJECT_SESSIONS_DIR" ]; then
+    ANALYZED_COUNT="$(find "$PROJECT_SESSIONS_DIR" -name '*.jsonl' 2>/dev/null \
+      | xargs -I{} basename {} .jsonl \
+      | jq -R . | jq -s \
+        --slurpfile state "$CORRECTIONS_STATE" \
+        '[.[] | select(. as $id | $state[0].analyzed_session_ids | index($id) != null)] | length' \
+        2>/dev/null || echo 0)"
+  fi
 fi
-
-TOTAL_SESSIONS=0
-if [ -d "$HOME/.claude/projects" ]; then
-  TOTAL_SESSIONS="$(find "$HOME/.claude/projects" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')"
-fi
-
 UNANALYZED=$(( TOTAL_SESSIONS - ANALYZED_COUNT ))
 [ "$UNANALYZED" -lt 0 ] && UNANALYZED=0
 
-# Memory: unanalyzed sessions
+# Memory
 MEMORY_STATE="$DATA_DIR/memory-state.json"
 MEM_ANALYZED_COUNT=0
-if [ -f "$MEMORY_STATE" ]; then
-  MEM_ANALYZED_COUNT="$(jq -r '.analyzed_session_ids | length' "$MEMORY_STATE" 2>/dev/null || echo 0)"
+if [ -f "$MEMORY_STATE" ] && [ -d "$PROJECT_SESSIONS_DIR" ]; then
+  MEM_ANALYZED_COUNT="$(find "$PROJECT_SESSIONS_DIR" -name '*.jsonl' 2>/dev/null \
+    | xargs -I{} basename {} .jsonl \
+    | jq -R . | jq -s \
+      --slurpfile state "$MEMORY_STATE" \
+      '[.[] | select(. as $id | $state[0].analyzed_session_ids | index($id) != null)] | length' \
+      2>/dev/null || echo 0)"
 fi
 MEM_UNANALYZED=$(( TOTAL_SESSIONS - MEM_ANALYZED_COUNT ))
 [ "$MEM_UNANALYZED" -lt 0 ] && MEM_UNANALYZED=0
 
-# Commands: unanalyzed sessions
+# Commands
 COMMANDS_STATE="$DATA_DIR/commands-state.json"
 CMD_ANALYZED_COUNT=0
-if [ -f "$COMMANDS_STATE" ]; then
-  CMD_ANALYZED_COUNT="$(jq -r '.analyzed_session_ids | length' "$COMMANDS_STATE" 2>/dev/null || echo 0)"
+if [ -f "$COMMANDS_STATE" ] && [ -d "$PROJECT_SESSIONS_DIR" ]; then
+  CMD_ANALYZED_COUNT="$(find "$PROJECT_SESSIONS_DIR" -name '*.jsonl' 2>/dev/null \
+    | xargs -I{} basename {} .jsonl \
+    | jq -R . | jq -s \
+      --slurpfile state "$COMMANDS_STATE" \
+      '[.[] | select(. as $id | $state[0].analyzed_session_ids | index($id) != null)] | length' \
+      2>/dev/null || echo 0)"
 fi
 CMD_UNANALYZED=$(( TOTAL_SESSIONS - CMD_ANALYZED_COUNT ))
 [ "$CMD_UNANALYZED" -lt 0 ] && CMD_UNANALYZED=0
@@ -213,7 +224,7 @@ $INCLUDE_COMMANDS && RECOMMENDATIONS+=("/slipstream-commands       ${CMD_UNANALY
 
 # ── Print output ───────────────────────────────────────────────────────────────
 if [ "${#RECOMMENDATIONS[@]}" -gt 0 ]; then
-  echo "[Slipstream]"
+  echo "[Slipstream] ($(basename "$CWD"))"
   for rec in "${RECOMMENDATIONS[@]}"; do
     echo "  $rec"
   done
