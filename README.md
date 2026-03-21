@@ -10,12 +10,13 @@ Claude Code asks permission before running commands, loses context mid-task, and
 
 ## How it works
 
-Four hooks run in the background during every Claude Code session:
+Five hooks run in the background during every Claude Code session:
 
 1. **Permission requests** are captured whenever Claude asks to run a command.
 2. **Context compactions** are noted whenever the context window fills and is compacted.
 3. **Tool failures** are recorded whenever a tool call fails.
 4. **File reads** are tracked whenever Claude reads or globs files, revealing which files it re-reads to orient itself.
+5. **Corrections** are mined from your session transcripts — moments where you had to intervene and redirect Claude are the most direct friction signal of all.
 
 When the total event count crosses a threshold (20 events) or it has been 7 days since the last review, Claude Code surfaces a reminder at the end of the session. Running `/slipstream` then triggers a full analysis:
 
@@ -49,7 +50,7 @@ brew install jq          # macOS
 sudo apt-get install jq  # Ubuntu/Debian
 
 # Clone and install
-git clone https://github.com/yourusername/slipstream
+git clone https://github.com/jonathanbetz/slipstream
 cd slipstream
 ./install.sh
 ```
@@ -79,7 +80,7 @@ At any time in Claude Code, run:
 
 This starts the full analysis and improvement workflow. Claude will:
 1. Show a dashboard of captured events
-2. Analyze all four friction modules
+2. Analyze all five friction modules
 3. Present a ranked improvement plan
 4. Apply approved changes (allow lists, CLAUDE.md additions, scripts)
 5. Update the review cursor so the threshold resets
@@ -109,6 +110,7 @@ All data is stored locally in `~/.slipstream/`:
 | `errors.jsonl` | Tool failure events (timestamp, session, cwd, tool, input) |
 | `reads.jsonl` | File read events (timestamp, session, cwd, tool, file_path) |
 | `.cursor.json` | Last-review state (line counts, timestamp) |
+| `corrections-state.json` | Analyzed session IDs (cumulative, prevents re-processing) |
 
 Nothing is uploaded, synced, or shared. The hooks write append-only JSONL files. The logs grow slowly — a busy week of Claude Code usage produces a few hundred lines across all files.
 
