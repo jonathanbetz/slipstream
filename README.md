@@ -72,29 +72,49 @@ This writes hook entries into `.claude/settings.local.json` inside that project 
 
 ## Usage
 
-### Automatic triggers
+### Dashboard
 
-After install, Slipstream runs silently in the background. It will remind you to run `/slipstream` when:
-
-- **20 or more** new friction events have been captured since the last review, or
-- **7 or more days** have passed since the last review and at least 5 new events exist
-
-The reminder appears as a message at the end of a session or the start of the next one.
-
-### Manual review
-
-At any time in Claude Code, run:
+Run `/slipstream` at any time to see what's been captured and which focused commands to run:
 
 ```
 /slipstream
 ```
 
-This starts the full analysis and improvement workflow. Claude will:
-1. Show a dashboard of captured events
-2. Analyze all five friction modules
-3. Present a ranked improvement plan
-4. Apply approved changes (allow lists, CLAUDE.md additions, scripts)
-5. Update the review cursor so the threshold resets
+### Focused commands
+
+Run these to analyze and fix a specific friction type:
+
+| Command | What it fixes |
+|---------|--------------|
+| `/slipstream-permissions` | Allow-list entries, native tool swaps, reusable scripts |
+| `/slipstream-context` | CLAUDE.md improvements to reduce context compaction |
+| `/slipstream-errors` | Pre-flight checks for repeated tool failures |
+| `/slipstream-reads` | CLAUDE.md summaries of files Claude re-reads every session |
+| `/slipstream-corrections` | Rules derived from moments you corrected Claude |
+
+Each command shows a mini-dashboard for its module, proposes a ranked improvement plan,
+waits for your approval, then applies changes directly.
+
+### Automatic triggers
+
+After install, the Stop and SessionStart hooks watch for accumulated friction. When
+thresholds are met, you'll see a message naming the specific commands to run — no need
+to remember to check:
+
+```
+[Slipstream]
+  /slipstream-permissions   23 new events
+  /slipstream-corrections    3 sessions
+```
+
+Thresholds per module:
+- **Permissions:** 5 new events
+- **Context:** 3 new compactions
+- **Errors:** 3 new failures
+- **Reads:** 10 new events
+- **Corrections:** 2 unanalyzed sessions
+
+A module is also included if its last review was more than 7 days ago and it has any new data.
 
 ---
 
@@ -128,7 +148,7 @@ The uninstaller removes hook scripts from `~/.claude/hooks/`, command files from
 
 ## Contributing
 
-Slipstream is intentionally minimal — the hook scripts are short and readable, the slash commands are plain Markdown, and the analysis logic lives inside Claude's context window rather than in external code. Improvements to the analysis heuristics in `commands/slipstream.md` are especially welcome.
+Slipstream is intentionally minimal — the hook scripts are short and readable, the slash commands are plain Markdown, and the analysis logic lives inside Claude's context window rather than in external code. Improvements to the analysis heuristics in the `commands/` files are especially welcome.
 
 ---
 

@@ -176,5 +176,5 @@ else
   echo "Hooks will fire in all Claude Code projects."
 fi
 echo ""
-echo "Run /slipstream in any Claude Code session to get started."
+echo "Run /slipstream in any Claude Code session to see the dashboard and get started."
 echo ""
