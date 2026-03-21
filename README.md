@@ -55,7 +55,18 @@ cd slipstream
 ./install.sh
 ```
 
-`install.sh` copies hook scripts to `~/.claude/hooks/`, command files to `~/.claude/commands/`, and merges the required hook entries into `~/.claude/settings.json`. It is safe to run multiple times — all merges are idempotent.
+This copies hook scripts to `~/.claude/hooks/`, command files to `~/.claude/commands/`, and merges hook entries into `~/.claude/settings.json`. Hooks fire across all your Claude Code projects. Safe to re-run — all merges are idempotent.
+
+### Per-project install
+
+If you only want Slipstream active in a specific project:
+
+```bash
+cd /path/to/your/project
+/path/to/slipstream/install.sh --project
+```
+
+This writes hook entries into `.claude/settings.local.json` inside that project instead of your global settings. Hook scripts are still installed to `~/.claude/hooks/` (they need to live somewhere Claude Code can reach them), but they only fire when you're working in that project. You may want to add `.claude/settings.local.json` to your `.gitignore`.
 
 ---
 

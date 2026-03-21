@@ -1,14 +1,29 @@
 #!/bin/bash
 # install.sh — Slipstream installer
-# Copies hooks and commands into ~/.claude/ and merges hook entries into
-# ~/.claude/settings.json idempotently.
+#
+# Usage:
+#   ./install.sh             Install globally (hooks fire in all projects)
+#   ./install.sh --project   Install for the current project only
+#                            (run from inside the project directory)
 
 set -e
 
+# ── Mode ──────────────────────────────────────────────────────────────────────
+PROJECT_MODE=false
+if [ "${1:-}" = "--project" ]; then
+  PROJECT_MODE=true
+fi
+
 echo ""
-echo "┌─────────────────────────────────────────┐"
-echo "│  Installing Slipstream...               │"
-echo "└─────────────────────────────────────────┘"
+if $PROJECT_MODE; then
+  echo "┌─────────────────────────────────────────────────────────┐"
+  echo "│  Installing Slipstream (project mode)...                │"
+  echo "└─────────────────────────────────────────────────────────┘"
+else
+  echo "┌─────────────────────────────────────────────────────────┐"
+  echo "│  Installing Slipstream (global mode)...                 │"
+  echo "└─────────────────────────────────────────────────────────┘"
+fi
 echo ""
 
 # ── Dependency check ──────────────────────────────────────────────────────────
@@ -28,7 +43,15 @@ CLAUDE_DIR="$HOME/.claude"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
 DATA_DIR="$HOME/.slipstream"
-SETTINGS="$CLAUDE_DIR/settings.json"
+
+if $PROJECT_MODE; then
+  PROJECT_DIR="$(pwd)"
+  PROJECT_CLAUDE_DIR="$PROJECT_DIR/.claude"
+  SETTINGS="$PROJECT_CLAUDE_DIR/settings.local.json"
+  mkdir -p "$PROJECT_CLAUDE_DIR"
+else
+  SETTINGS="$CLAUDE_DIR/settings.json"
+fi
 
 mkdir -p "$HOOKS_DIR" "$COMMANDS_DIR" "$DATA_DIR"
 
@@ -41,21 +64,22 @@ for hook in "$SCRIPT_DIR"/hooks/slipstream-*.sh; do
   echo "  ✓ $(basename "$hook")"
 done
 
-# ── Copy commands ─────────────────────────────────────────────────────────────
-echo ""
-echo "Copying commands to $COMMANDS_DIR ..."
-for cmd in "$SCRIPT_DIR"/commands/slipstream*.md; do
-  dest="$COMMANDS_DIR/$(basename "$cmd")"
-  cp "$cmd" "$dest"
-  echo "  ✓ $(basename "$cmd")"
-done
+# ── Copy commands (global only — commands are always available everywhere) ────
+if ! $PROJECT_MODE; then
+  echo ""
+  echo "Copying commands to $COMMANDS_DIR ..."
+  for cmd in "$SCRIPT_DIR"/commands/slipstream*.md; do
+    dest="$COMMANDS_DIR/$(basename "$cmd")"
+    cp "$cmd" "$dest"
+    echo "  ✓ $(basename "$cmd")"
+  done
+fi
 
-# ── Bootstrap settings.json ───────────────────────────────────────────────────
+# ── Bootstrap settings file ───────────────────────────────────────────────────
 if [ ! -f "$SETTINGS" ]; then
   echo '{}' > "$SETTINGS"
 fi
 
-# Ensure .hooks key exists
 CURRENT="$(cat "$SETTINGS")"
 if ! echo "$CURRENT" | jq -e '.hooks' >/dev/null 2>&1; then
   echo "$CURRENT" | jq '. + {"hooks": {}}' > "$SETTINGS"
@@ -76,7 +100,6 @@ merge_hook() {
 
   settings_tmp="$(mktemp)"
 
-  # Check whether this command is already registered for this event
   local already_present
   already_present="$(jq -r \
     --arg event "$event" \
@@ -91,7 +114,6 @@ merge_hook() {
   fi
 
   if [ -n "$matcher" ]; then
-    # Entry with matcher field
     jq \
       --arg event "$event" \
       --arg cmd "$cmd_path" \
@@ -99,7 +121,6 @@ merge_hook() {
       '.hooks[$event] = ((.hooks[$event] // []) + [{"matcher": $matcher, "hooks": [{"type": "command", "command": $cmd, "timeout": 3000}]}])' \
       "$SETTINGS" > "$settings_tmp"
   else
-    # Plain entry without matcher
     jq \
       --arg event "$event" \
       --arg cmd "$cmd_path" \
@@ -111,7 +132,7 @@ merge_hook() {
   echo "  ✓ $event: $(basename "$cmd_path") registered"
 }
 
-# ── Register all hooks ────────────────────────────────────────────────────────
+# ── Register hooks ────────────────────────────────────────────────────────────
 echo ""
 echo "Merging hooks into $SETTINGS ..."
 
@@ -122,16 +143,38 @@ merge_hook "PostToolUse"        "~/.claude/hooks/slipstream-capture-reads.sh"   
 merge_hook "Stop"               "~/.claude/hooks/slipstream-check-triggers.sh"
 merge_hook "SessionStart"       "~/.claude/hooks/slipstream-check-triggers.sh"
 
+# ── Project mode: .gitignore suggestions ─────────────────────────────────────
+if $PROJECT_MODE; then
+  echo ""
+  echo "Consider adding these to your .gitignore:"
+  echo "  .claude/settings.local.json"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
-echo "┌─────────────────────────────────────────────────────────┐"
-echo "│  Slipstream installed successfully!                     │"
-echo "└─────────────────────────────────────────────────────────┘"
-echo ""
-echo "  Hook scripts : $HOOKS_DIR"
-echo "  Commands     : $COMMANDS_DIR"
-echo "  Data dir     : $DATA_DIR"
-echo "  Settings     : $SETTINGS"
+if $PROJECT_MODE; then
+  echo "┌─────────────────────────────────────────────────────────┐"
+  echo "│  Slipstream installed for this project!                 │"
+  echo "└─────────────────────────────────────────────────────────┘"
+  echo ""
+  echo "  Hook scripts : $HOOKS_DIR"
+  echo "  Project hooks: $SETTINGS"
+  echo "  Data dir     : $DATA_DIR"
+  echo ""
+  echo "Hooks will fire only when Claude Code is open in:"
+  echo "  $PROJECT_DIR"
+else
+  echo "┌─────────────────────────────────────────────────────────┐"
+  echo "│  Slipstream installed successfully!                     │"
+  echo "└─────────────────────────────────────────────────────────┘"
+  echo ""
+  echo "  Hook scripts : $HOOKS_DIR"
+  echo "  Commands     : $COMMANDS_DIR"
+  echo "  Data dir     : $DATA_DIR"
+  echo "  Settings     : $SETTINGS"
+  echo ""
+  echo "Hooks will fire in all Claude Code projects."
+fi
 echo ""
 echo "Run /slipstream in any Claude Code session to get started."
 echo ""
