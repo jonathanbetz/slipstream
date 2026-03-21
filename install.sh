@@ -141,7 +141,7 @@ merge_hook "PreCompact"         "~/.claude/hooks/slipstream-capture-compaction.s
 merge_hook "PostToolUseFailure" "~/.claude/hooks/slipstream-capture-errors.sh"
 merge_hook "PostToolUse"        "~/.claude/hooks/slipstream-capture-reads.sh"    "Read|Glob"
 merge_hook "Stop"               "~/.claude/hooks/slipstream-check-triggers.sh"
-merge_hook "SessionStart"       "~/.claude/hooks/slipstream-check-triggers.sh"
+merge_hook "SessionStart"       "~/.claude/hooks/slipstream-session-start.sh"
 
 # ── Project mode: .gitignore suggestions ─────────────────────────────────────
 if $PROJECT_MODE; then

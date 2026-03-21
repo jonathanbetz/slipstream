@@ -97,10 +97,13 @@ waits for your approval, then applies changes directly.
 
 ### Automatic triggers
 
-After install, the Stop and SessionStart hooks watch for accumulated friction. When
-thresholds are met, you'll see a message naming the specific commands to run — no need
-to remember to check:
+Two hooks keep Slipstream running in the background without any manual intervention:
 
+**`SessionStart`** — at the start of every session, Slipstream checks whether any module is above its threshold and immediately alerts you. It also instructs Claude to set up an hourly `CronCreate` job for the session that silently re-checks thresholds every hour and runs the appropriate command when data has accumulated. Nothing is ever applied without your approval — each command presents a plan and waits for your go-ahead.
+
+**`Stop`** — after each response, if thresholds are exceeded, a reminder is printed naming the specific commands to run.
+
+Example alert:
 ```
 [Slipstream]
   /slipstream-permissions   23 new events
@@ -114,7 +117,7 @@ Thresholds per module:
 - **Reads:** 10 new events
 - **Corrections:** 2 unanalyzed sessions
 
-A module is also included if its last review was more than 7 days ago and it has any new data.
+A module is also surfaced if its last review was more than 7 days ago and it has any new data.
 
 ---
 

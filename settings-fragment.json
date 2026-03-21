@@ -16,7 +16,7 @@
       {"hooks": [{"type": "command", "command": "~/.claude/hooks/slipstream-check-triggers.sh", "timeout": 3000}]}
     ],
     "SessionStart": [
-      {"hooks": [{"type": "command", "command": "~/.claude/hooks/slipstream-check-triggers.sh", "timeout": 3000}]}
+      {"hooks": [{"type": "command", "command": "~/.claude/hooks/slipstream-session-start.sh", "timeout": 5000}]}
     ]
   }
 }
