@@ -87,18 +87,6 @@ This starts the full analysis and improvement workflow. Claude will:
 
 ---
 
-## Per-project setup
-
-To add a per-project Stop hook that works even in projects without global settings, run inside any project:
-
-```
-/slipstream-install
-```
-
-This verifies the global hooks are active, adds a project-local `Stop` trigger to `.claude/settings.local.json`, and suggests `.gitignore` entries for machine-specific files.
-
----
-
 ## Data
 
 All data is stored locally in `~/.slipstream/`:
