@@ -66,7 +66,7 @@ count_new() {
     echo 0
     return
   fi
-  jq -r \
+  jq -c \
     --arg cwd "$CWD" \
     --arg ts "$last_ts" \
     'select((.cwd | startswith($cwd)) and .timestamp > $ts)' \
@@ -101,7 +101,7 @@ NEW_READS="$(count_new       "$DATA_DIR/reads.jsonl"        "$LAST_READS_TS")"
 # ── Unanalyzed sessions for current project ────────────────────────────────────
 TOTAL_SESSIONS=0
 if [ -d "$PROJECT_SESSIONS_DIR" ]; then
-  TOTAL_SESSIONS="$(find "$PROJECT_SESSIONS_DIR" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')"
+  TOTAL_SESSIONS="$(find "$PROJECT_SESSIONS_DIR" -maxdepth 1 -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
 # Corrections
@@ -110,7 +110,7 @@ ANALYZED_COUNT=0
 if [ -f "$CORRECTIONS_STATE" ]; then
   # Count how many of this project's sessions are already analyzed
   if [ -d "$PROJECT_SESSIONS_DIR" ]; then
-    ANALYZED_COUNT="$(find "$PROJECT_SESSIONS_DIR" -name '*.jsonl' 2>/dev/null \
+    ANALYZED_COUNT="$(find "$PROJECT_SESSIONS_DIR" -maxdepth 1 -name '*.jsonl' 2>/dev/null \
       | xargs -I{} basename {} .jsonl \
       | jq -R . | jq -s \
         --slurpfile state "$CORRECTIONS_STATE" \
@@ -125,7 +125,7 @@ UNANALYZED=$(( TOTAL_SESSIONS - ANALYZED_COUNT ))
 MEMORY_STATE="$DATA_DIR/memory-state.json"
 MEM_ANALYZED_COUNT=0
 if [ -f "$MEMORY_STATE" ] && [ -d "$PROJECT_SESSIONS_DIR" ]; then
-  MEM_ANALYZED_COUNT="$(find "$PROJECT_SESSIONS_DIR" -name '*.jsonl' 2>/dev/null \
+  MEM_ANALYZED_COUNT="$(find "$PROJECT_SESSIONS_DIR" -maxdepth 1 -name '*.jsonl' 2>/dev/null \
     | xargs -I{} basename {} .jsonl \
     | jq -R . | jq -s \
       --slurpfile state "$MEMORY_STATE" \
@@ -139,7 +139,7 @@ MEM_UNANALYZED=$(( TOTAL_SESSIONS - MEM_ANALYZED_COUNT ))
 COMMANDS_STATE="$DATA_DIR/commands-state.json"
 CMD_ANALYZED_COUNT=0
 if [ -f "$COMMANDS_STATE" ] && [ -d "$PROJECT_SESSIONS_DIR" ]; then
-  CMD_ANALYZED_COUNT="$(find "$PROJECT_SESSIONS_DIR" -name '*.jsonl' 2>/dev/null \
+  CMD_ANALYZED_COUNT="$(find "$PROJECT_SESSIONS_DIR" -maxdepth 1 -name '*.jsonl' 2>/dev/null \
     | xargs -I{} basename {} .jsonl \
     | jq -R . | jq -s \
       --slurpfile state "$COMMANDS_STATE" \

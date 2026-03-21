@@ -42,7 +42,7 @@ count_new() {
     echo 0
     return
   fi
-  jq -r \
+  jq -c \
     --arg cwd "$CWD" \
     --arg ts "$last_ts" \
     'select((.cwd | startswith($cwd)) and .timestamp > $ts)' \
@@ -57,7 +57,7 @@ READ_NEW=$(count_new "reads.jsonl"        "last_reads_review")
 # ── Unanalyzed sessions for current project ────────────────────────────────────
 TOTAL_SESSIONS=0
 if [ -d "$PROJECT_SESSIONS_DIR" ]; then
-  TOTAL_SESSIONS=$(find "$PROJECT_SESSIONS_DIR" -name "*.jsonl" 2>/dev/null | wc -l | tr -d ' ')
+  TOTAL_SESSIONS=$(find "$PROJECT_SESSIONS_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l | tr -d ' ')
 fi
 
 # Helper: count analyzed sessions that belong to this project
@@ -67,7 +67,7 @@ count_project_analyzed() {
     echo 0
     return
   fi
-  find "$PROJECT_SESSIONS_DIR" -name '*.jsonl' 2>/dev/null \
+  find "$PROJECT_SESSIONS_DIR" -maxdepth 1 -name '*.jsonl' 2>/dev/null \
     | xargs -I{} basename {} .jsonl \
     | jq -R . | jq -s \
       --slurpfile state "$state_file" \
