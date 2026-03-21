@@ -14,6 +14,8 @@ THRESHOLD_COMPACTIONS=3
 THRESHOLD_ERRORS=3
 THRESHOLD_READS=10
 THRESHOLD_CORRECTIONS=2
+THRESHOLD_MEMORY=2
+THRESHOLD_COMMANDS=3
 
 # Time-based threshold: if a module has any new data and last review was >7 days ago,
 # include it regardless of count.
@@ -69,6 +71,8 @@ LAST_CONTEXT_TS=""
 LAST_ERRORS_TS=""
 LAST_READS_TS=""
 LAST_CORRECTIONS_TS=""
+LAST_MEMORY_TS=""
+LAST_COMMANDS_TS=""
 
 if [ -f "$CURSOR" ]; then
   LAST_PERMISSIONS="$(jq -r '.permissions_line_count // 0'    "$CURSOR")"
@@ -80,6 +84,8 @@ if [ -f "$CURSOR" ]; then
   LAST_ERRORS_TS="$(jq -r     '.last_errors_review // ""'        "$CURSOR")"
   LAST_READS_TS="$(jq -r      '.last_reads_review // ""'         "$CURSOR")"
   LAST_CORRECTIONS_TS="$(jq -r '.last_corrections_review // ""'  "$CURSOR")"
+  LAST_MEMORY_TS="$(jq -r   '.last_memory_review // ""'          "$CURSOR")"
+  LAST_COMMANDS_TS="$(jq -r '.last_commands_review // ""'        "$CURSOR")"
 fi
 
 # ── Current line counts ────────────────────────────────────────────────────────
@@ -113,6 +119,24 @@ fi
 
 UNANALYZED=$(( TOTAL_SESSIONS - ANALYZED_COUNT ))
 [ "$UNANALYZED" -lt 0 ] && UNANALYZED=0
+
+# Memory: unanalyzed sessions
+MEMORY_STATE="$DATA_DIR/memory-state.json"
+MEM_ANALYZED_COUNT=0
+if [ -f "$MEMORY_STATE" ]; then
+  MEM_ANALYZED_COUNT="$(jq -r '.analyzed_session_ids | length' "$MEMORY_STATE" 2>/dev/null || echo 0)"
+fi
+MEM_UNANALYZED=$(( TOTAL_SESSIONS - MEM_ANALYZED_COUNT ))
+[ "$MEM_UNANALYZED" -lt 0 ] && MEM_UNANALYZED=0
+
+# Commands: unanalyzed sessions
+COMMANDS_STATE="$DATA_DIR/commands-state.json"
+CMD_ANALYZED_COUNT=0
+if [ -f "$COMMANDS_STATE" ]; then
+  CMD_ANALYZED_COUNT="$(jq -r '.analyzed_session_ids | length' "$COMMANDS_STATE" 2>/dev/null || echo 0)"
+fi
+CMD_UNANALYZED=$(( TOTAL_SESSIONS - CMD_ANALYZED_COUNT ))
+[ "$CMD_UNANALYZED" -lt 0 ] && CMD_UNANALYZED=0
 
 # ── Build recommendation list ──────────────────────────────────────────────────
 RECOMMENDATIONS=()
@@ -166,6 +190,26 @@ elif [ "$UNANALYZED" -gt 0 ] && [ -n "$LAST_CORRECTIONS_TS" ]; then
   [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_CORRECTIONS=true
 fi
 $INCLUDE_CORRECTIONS && RECOMMENDATIONS+=("/slipstream-corrections    ${UNANALYZED} unanalyzed sessions")
+
+# Memory
+INCLUDE_MEMORY=false
+if [ "$MEM_UNANALYZED" -ge "$THRESHOLD_MEMORY" ]; then
+  INCLUDE_MEMORY=true
+elif [ "$MEM_UNANALYZED" -gt 0 ] && [ -n "$LAST_MEMORY_TS" ]; then
+  DAYS="$(days_since "$LAST_MEMORY_TS")"
+  [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_MEMORY=true
+fi
+$INCLUDE_MEMORY && RECOMMENDATIONS+=("/slipstream-memory         ${MEM_UNANALYZED} unanalyzed sessions")
+
+# Commands
+INCLUDE_COMMANDS=false
+if [ "$CMD_UNANALYZED" -ge "$THRESHOLD_COMMANDS" ]; then
+  INCLUDE_COMMANDS=true
+elif [ "$CMD_UNANALYZED" -gt 0 ] && [ -n "$LAST_COMMANDS_TS" ]; then
+  DAYS="$(days_since "$LAST_COMMANDS_TS")"
+  [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_COMMANDS=true
+fi
+$INCLUDE_COMMANDS && RECOMMENDATIONS+=("/slipstream-commands       ${CMD_UNANALYZED} unanalyzed sessions")
 
 # ── Print output ───────────────────────────────────────────────────────────────
 if [ "${#RECOMMENDATIONS[@]}" -gt 0 ]; then

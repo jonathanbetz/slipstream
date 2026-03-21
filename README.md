@@ -37,6 +37,8 @@ Nothing is sent anywhere. All data lives in `~/.slipstream/`.
 | Errors | PostToolUseFailure | Repeated tool failures | Pre-flight checks, broken dependencies |
 | Reads | PostToolUse | Session-start orientation reads | CLAUDE.md summaries of key files |
 | Corrections | Stop (transcript scan) | Moments you corrected Claude | .claude/rules files, CLAUDE.md additions |
+| `/slipstream-memory` | Stop (transcript scan) | User-level facts repeated across sessions | MEMORY.md entries, memory files |
+| `/slipstream-commands` | Stop (transcript scan) | Repeated Claude-orchestrated workflows | New slash command files |
 
 ---
 
@@ -91,6 +93,8 @@ Run these to analyze and fix a specific friction type:
 | `/slipstream-errors` | Pre-flight checks for repeated tool failures |
 | `/slipstream-reads` | CLAUDE.md summaries of files Claude re-reads every session |
 | `/slipstream-corrections` | Rules derived from moments you corrected Claude |
+| `/slipstream-memory` | Memory entries derived from user-level facts across sessions |
+| `/slipstream-commands` | Slash commands derived from repeated orchestration workflows |
 
 Each command shows a mini-dashboard for its module, proposes a ranked improvement plan,
 waits for your approval, then applies changes directly.
@@ -116,6 +120,8 @@ Thresholds per module:
 - **Errors:** 3 new failures
 - **Reads:** 10 new events
 - **Corrections:** 2 unanalyzed sessions
+- **Memory:** 2 unanalyzed sessions
+- **Commands:** 3 unanalyzed sessions
 
 A module is also surfaced if its last review was more than 7 days ago and it has any new data.
 
@@ -133,6 +139,8 @@ All data is stored locally in `~/.slipstream/`:
 | `reads.jsonl` | File read events (timestamp, session, cwd, tool, file_path) |
 | `.cursor.json` | Last-review state (line counts, timestamp) |
 | `corrections-state.json` | Analyzed session IDs (cumulative, prevents re-processing) |
+| `memory-state.json` | Analyzed session IDs for the memory module |
+| `commands-state.json` | Analyzed session IDs for the commands module |
 
 Nothing is uploaded, synced, or shared. The hooks write append-only JSONL files. The logs grow slowly — a busy week of Claude Code usage produces a few hundred lines across all files.
 
