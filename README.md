@@ -4,7 +4,7 @@
 
 ---
 
-Claude Code asks permission before running commands, loses context mid-task, and re-reads the same files to orient itself at the start of each session. Each friction point is a small tax on your flow. Slipstream captures these events silently across every session and periodically reduces them — updating allow lists, improving CLAUDE.md files, and creating scripts for repeated workflows.
+Claude Code asks permission before running commands, loses context mid-task, and re-reads the same files to orient itself at the start of each session. Each friction point is a small tax on your flow. Slipstream captures these events silently across every session and periodically reduces them — updating allow lists, improving CLAUDE.md files, and creating scripts for repeated workflows. Corrections — moments where you had to intervene and redirect Claude — are the most direct friction signal of all, and slipstream captures them from your session history automatically.
 
 ---
 
@@ -35,6 +35,7 @@ Nothing is sent anywhere. All data lives in `~/.slipstream/`.
 | Context | PreCompact | Context window compactions | CLAUDE.md depth, task-splitting guidance |
 | Errors | PostToolUseFailure | Repeated tool failures | Pre-flight checks, broken dependencies |
 | Reads | PostToolUse | Session-start orientation reads | CLAUDE.md summaries of key files |
+| Corrections | Stop (transcript scan) | Moments you corrected Claude | .claude/rules files, CLAUDE.md additions |
 
 ---
 

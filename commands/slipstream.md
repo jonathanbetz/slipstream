@@ -29,6 +29,7 @@ Slipstream — friction captured since [date of earliest entry across all logs]
   Compactions   N events  (M projects)
   Errors        N events  (M tools)
   Reads         N events  (M files, L projects)
+  Corrections   N sessions analyzed  (M corrections found)
 
   Last review: [last_review_timestamp from .cursor.json, or "never"]
 ```
@@ -41,9 +42,9 @@ Where:
 
 ---
 
-## Phase 2: Four-module analysis
+## Phase 2: Five-module analysis
 
-Run all four analyses before presenting anything. Then present all findings together.
+Run all five analyses before presenting anything. Then present all findings together.
 
 ---
 
@@ -169,6 +170,52 @@ Be specific: the summary should capture the facts Claude needs (e.g. for a confi
 
 ---
 
+### Module E: Correction patterns
+
+Find session transcripts not yet analyzed:
+- List all files under `~/.claude/projects/` matching `*.jsonl`
+- Read `~/.slipstream/corrections-state.json` to get `analyzed_session_ids` (default empty array)
+- Process only transcripts whose filename (session ID) is NOT in that list
+- Skip transcripts with fewer than 4 turns (too short to contain meaningful corrections)
+
+For each unanalyzed transcript, read it line by line. Each line is a JSON object representing one conversation turn with fields like `role` ("user" or "assistant") and `content`.
+
+Identify correction turns: a user turn that follows an assistant turn and contains signals like:
+- Explicit negation: "no", "don't", "stop", "wait", "actually", "that's not", "that's wrong"
+- Redirection: "instead", "rather", "what I meant", "I said", "I meant"
+- Undo requests: "revert", "undo", "go back", "remove what you just"
+- Re-statement of original request with modifications
+
+For each correction found, record:
+- `project`: derived from the transcript's directory path under `~/.claude/projects/`
+- `session_id`: the transcript filename without extension
+- `assistant_turn`: the assistant message that was corrected (first 300 chars)
+- `correction`: the user's correction turn (first 300 chars)
+- `theme`: briefly what the correction was about
+
+After collecting all corrections across all unanalyzed transcripts:
+- Group by project
+- Look for recurring themes: same type of correction appearing in 2+ sessions for the same project
+- Classify each theme:
+  - `convention` — code style, naming, formatting the AI kept getting wrong
+  - `scope` — doing too much, too little, touching wrong files
+  - `workflow` — wrong order of operations, skipped steps
+  - `architecture` — structural decisions, where things belong
+  - `domain` — facts about the project the AI didn't know
+- For recurring themes (2+ sessions), generate a concrete mitigation:
+  - `convention`/`workflow`/`scope` → a `.claude/rules/<slug>.md` file with a clear rule
+  - `architecture`/`domain` → an addition to the appropriate CLAUDE.md (root or subdirectory)
+- For one-off corrections, group into broader patterns if 3+ exist, otherwise skip (too noisy)
+
+Identify the right file location for each mitigation:
+- Project-wide rules → `.claude/rules/<slug>.md` in the project root
+- Directory-specific facts → the closest ancestor CLAUDE.md for the files involved
+- Cross-cutting conventions → root `CLAUDE.md`
+
+Include in the unified plan under a **Corrections** section.
+
+---
+
 ## Phase 3: Unified improvement plan
 
 Present a single ranked improvement plan, ordered by estimated friction-sessions eliminated. Group by module. Use this exact format:
@@ -192,6 +239,10 @@ Slipstream improvement plan
 
 ── Reads (pre-load N orientation files) ────────────────────────
   [project]  CLAUDE.md: summarize lib/auth/CLAUDE.md    read in 6 sessions
+
+── Corrections (from N sessions, M corrections) ────────────────
+  [project]  .claude/rules/no-scope-creep.md            3 sessions, convention
+  [project]  CLAUDE.md: add domain fact about auth flow  2 sessions, domain
 ```
 
 After displaying the plan, say:
@@ -262,6 +313,21 @@ When adding a summary of a frequently-read file to CLAUDE.md:
 3. Add them as a bullet list under `## Key files` or a project-specific heading in CLAUDE.md
 4. Do not paste the full file — summarize only what Claude needs to know
 
+### Correction mitigations
+
+For `.claude/rules/<slug>.md` files:
+- Write the file to the proposed path
+- Include a header comment: `# Learned from N corrections across M sessions`
+- Keep the rule concise and actionable (what to do, not what not to do where possible)
+- Run `chmod +x` is not needed for .md files
+
+For CLAUDE.md additions from correction analysis:
+- Add under an appropriate existing section if one exists, or create a new section
+- Keep additions terse — one to three bullet points per theme
+- Do NOT rewrite existing content
+
+Report: "Created [path]" or "Updated [path]: added correction rule"
+
 ---
 
 ## Phase 5: Update cursor
@@ -274,11 +340,22 @@ Write `~/.slipstream/.cursor.json` with the current state:
   "permissions_line_count": <number of lines in permissions.jsonl, or 0 if missing>,
   "compactions_line_count": <number of lines in compactions.jsonl, or 0 if missing>,
   "errors_line_count": <number of lines in errors.jsonl, or 0 if missing>,
-  "reads_line_count": <number of lines in reads.jsonl, or 0 if missing>
+  "reads_line_count": <number of lines in reads.jsonl, or 0 if missing>,
+  "corrections_analyzed_sessions": ["<session_id_1>", "<session_id_2>"]
 }
 ```
 
 Use `wc -l` to count lines.
+
+Also write/merge `~/.slipstream/corrections-state.json`:
+
+```json
+{
+  "analyzed_session_ids": ["<all session IDs processed so far, cumulative>"]
+}
+```
+
+This must be cumulative — always merge with existing `analyzed_session_ids`, never overwrite. Read the existing file first (if it exists), merge the newly processed session IDs into the array, then write the result back.
 
 ---
 
