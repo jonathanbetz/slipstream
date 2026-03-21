@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {"hooks": [{"type": "command", "command": "~/.claude/hooks/slipstream-capture-permission.sh", "timeout": 3000}]}
+    ],
+    "PreCompact": [
+      {"hooks": [{"type": "command", "command": "~/.claude/hooks/slipstream-capture-compaction.sh", "timeout": 3000}]}
+    ],
+    "PostToolUseFailure": [
+      {"hooks": [{"type": "command", "command": "~/.claude/hooks/slipstream-capture-errors.sh", "timeout": 3000}]}
+    ],
+    "PostToolUse": [
+      {"matcher": "Read|Glob", "hooks": [{"type": "command", "command": "~/.claude/hooks/slipstream-capture-reads.sh", "timeout": 3000}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "~/.claude/hooks/slipstream-check-triggers.sh", "timeout": 3000}]}
+    ],
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "~/.claude/hooks/slipstream-check-triggers.sh", "timeout": 3000}]}
+    ]
+  }
+}
