@@ -27,8 +27,18 @@ fi
 echo ""
 
 # ── Dependency check ──────────────────────────────────────────────────────────
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "Error: python3 is required but not found."
+  echo ""
+  echo "Install it with:"
+  echo "  macOS:   brew install python3"
+  echo "  Ubuntu:  sudo apt-get install python3"
+  echo "  Fedora:  sudo dnf install python3"
+  exit 1
+fi
+
 if ! command -v jq >/dev/null 2>&1; then
-  echo "Error: jq is required but not found."
+  echo "Error: jq is required for install.sh but not found."
   echo ""
   echo "Install it with:"
   echo "  macOS:   brew install jq"
@@ -57,12 +67,17 @@ mkdir -p "$HOOKS_DIR" "$COMMANDS_DIR" "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR
 
 # ── Copy hooks ────────────────────────────────────────────────────────────────
 echo "Copying hook scripts to $HOOKS_DIR ..."
-for hook in "$SCRIPT_DIR"/hooks/slipstream-*.sh; do
+for hook in "$SCRIPT_DIR"/hooks/slipstream-*.py; do
   dest="$HOOKS_DIR/$(basename "$hook")"
   cp "$hook" "$dest"
   chmod +x "$dest"
   echo "  ✓ $(basename "$hook")"
 done
+
+echo "Copying slipstream package to $HOOKS_DIR/slipstream/ ..."
+rm -rf "$HOOKS_DIR/slipstream"
+cp -r "$SCRIPT_DIR/hooks/slipstream" "$HOOKS_DIR/slipstream"
+echo "  ✓ slipstream/ package"
 
 # ── Copy commands (global only — commands are always available everywhere) ────
 if ! $PROJECT_MODE; then
@@ -136,12 +151,12 @@ merge_hook() {
 echo ""
 echo "Merging hooks into $SETTINGS ..."
 
-merge_hook "PermissionRequest"  "~/.claude/hooks/slipstream-capture-permission.sh"
-merge_hook "PreCompact"         "~/.claude/hooks/slipstream-capture-compaction.sh"
-merge_hook "PostToolUseFailure" "~/.claude/hooks/slipstream-capture-errors.sh"
-merge_hook "PostToolUse"        "~/.claude/hooks/slipstream-capture-reads.sh"    "Read|Glob"
-merge_hook "Stop"               "~/.claude/hooks/slipstream-check-triggers.sh"
-merge_hook "SessionStart"       "~/.claude/hooks/slipstream-session-start.sh"
+merge_hook "PermissionRequest"  "~/.claude/hooks/slipstream-capture-permission.py"
+merge_hook "PreCompact"         "~/.claude/hooks/slipstream-capture-compaction.py"
+merge_hook "PostToolUseFailure" "~/.claude/hooks/slipstream-capture-errors.py"
+merge_hook "PostToolUse"        "~/.claude/hooks/slipstream-capture-reads.py"    "Read|Glob"
+merge_hook "Stop"               "~/.claude/hooks/slipstream-check-triggers.py"
+merge_hook "SessionStart"       "~/.claude/hooks/slipstream-session-start.py"
 
 # ── Project mode: .gitignore suggestions ─────────────────────────────────────
 if $PROJECT_MODE; then
