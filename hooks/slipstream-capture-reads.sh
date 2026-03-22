@@ -30,11 +30,14 @@ case "$TOOL_NAME" in
   *) exit 0 ;;
 esac
 
-mkdir -p "$DATA_DIR"
-
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // ""')"
 CWD="$(printf '%s' "$INPUT" | jq -r '.cwd // ""')"
+[ -z "$CWD" ] && exit 0
+
+PROJECT_KEY="$(printf '%s' "$CWD" | sed 's|/|-|g')"
+LOG="$DATA_DIR/projects/$PROJECT_KEY/reads.jsonl"
+mkdir -p "$DATA_DIR/projects/$PROJECT_KEY"
 
 # Read uses file_path; Glob uses pattern
 if [ "$TOOL_NAME" = "Read" ]; then

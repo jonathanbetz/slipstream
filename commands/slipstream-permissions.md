@@ -18,14 +18,13 @@ All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
 ## Step 1: Mini-dashboard
 
-Load ~/.slipstream/permissions.jsonl filtered to entries where `.cwd` starts with the
-current project path. Load the per-project cursor.
+Load `~/.slipstream/projects/<project-key>/permissions.jsonl`. Load the per-project cursor.
 
 Show:
-- Total filtered entries (line count for current project)
-- New since last review: count of filtered entries with `.timestamp` > `last_permissions_review`
+- Total entries (line count for this project)
+- New since last review: count of entries with `.timestamp` > `last_permissions_review`
   in per-project cursor (if no cursor, all entries are "new")
-- Date range (earliest and latest timestamp among filtered entries)
+- Date range (earliest and latest timestamp among entries)
 
 If the file is empty or missing, say:
 
@@ -59,6 +58,7 @@ Flag a {project, normalized_pattern} as an allow-list candidate if ALL are true:
 
 Cross-project candidates: if the same normalized pattern appears in 2+ distinct projects
 with session_count >= 2 each, flag it as a global ~/.claude/settings.json candidate.
+Iterate over `~/.slipstream/projects/*/permissions.jsonl` for cross-project analysis.
 
 Score each candidate: session_count × recency_weight, where recency_weight = 1.5 if last
 seen within 30 days, else 1.0. Sort candidates by score descending.

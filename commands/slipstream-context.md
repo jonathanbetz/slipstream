@@ -16,12 +16,11 @@ All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
 ## Step 1: Mini-dashboard
 
-Load ~/.slipstream/compactions.jsonl filtered to entries where `.cwd` starts with the
-current project path. Load the per-project cursor.
+Load `~/.slipstream/projects/<project-key>/compactions.jsonl`. Load the per-project cursor.
 
 Show:
-- Total filtered entries (compactions for this project)
-- New since last review: count of filtered entries with `.timestamp` > `last_context_review`
+- Total entries (compactions for this project)
+- New since last review: count of entries with `.timestamp` > `last_context_review`
   in per-project cursor (if no cursor, all entries are "new")
 
 If the file is empty or missing, say:

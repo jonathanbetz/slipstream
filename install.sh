@@ -53,7 +53,7 @@ else
   SETTINGS="$CLAUDE_DIR/settings.json"
 fi
 
-mkdir -p "$HOOKS_DIR" "$COMMANDS_DIR" "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/cursors"
+mkdir -p "$HOOKS_DIR" "$COMMANDS_DIR" "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/cursors" "$DATA_DIR/projects"
 
 # ── Copy hooks ────────────────────────────────────────────────────────────────
 echo "Copying hook scripts to $HOOKS_DIR ..."

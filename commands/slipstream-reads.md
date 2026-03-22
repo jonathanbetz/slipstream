@@ -17,14 +17,13 @@ All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
 ## Step 1: Mini-dashboard
 
-Load ~/.slipstream/reads.jsonl filtered to entries where `.cwd` starts with the
-current project path. Load the per-project cursor.
+Load `~/.slipstream/projects/<project-key>/reads.jsonl`. Load the per-project cursor.
 
 Show:
-- Total filtered entries (reads for this project)
-- New since last review: count of filtered entries with `.timestamp` > `last_reads_review`
+- Total entries (reads for this project)
+- New since last review: count of entries with `.timestamp` > `last_reads_review`
   in per-project cursor (if no cursor, all entries are "new")
-- Distinct files tracked (distinct file_path values among filtered entries)
+- Distinct files tracked (distinct file_path values among entries)
 
 If the file is empty or missing, say:
 

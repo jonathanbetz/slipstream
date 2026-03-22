@@ -16,7 +16,7 @@ trap 'exit 0' ERR
 
 command -v jq >/dev/null 2>&1 || exit 0
 
-mkdir -p "$DATA_DIR"
+mkdir -p "$DATA_DIR/projects"
 
 # ── Determine current project from hook stdin ──────────────────────────────
 INPUT="$(cat)"
@@ -31,9 +31,10 @@ PROJECT_KEY="$(printf '%s' "$CWD" | sed 's|/|-|g')"
 
 # Per-project cursor and session directory
 CURSOR="$DATA_DIR/cursors/${PROJECT_KEY}.json"
+PROJECT_DIR="$DATA_DIR/projects/${PROJECT_KEY}"
 PROJECT_SESSIONS_DIR="$HOME/.claude/projects/${PROJECT_KEY}"
 
-mkdir -p "$DATA_DIR/cursors"
+mkdir -p "$DATA_DIR/cursors" "$PROJECT_DIR"
 
 # ── Helper: days since an ISO 8601 timestamp (macOS + Linux portable) ─────────
 days_since() {
@@ -57,7 +58,7 @@ days_since() {
   fi
 }
 
-# ── Helper: count events for current project since a timestamp ────────────────
+# ── Helper: count events since a timestamp ────────────────────────────────────
 # Usage: count_new <jsonl_file> <last_review_ts>
 count_new() {
   local file="$1"
@@ -66,10 +67,7 @@ count_new() {
     echo 0
     return
   fi
-  jq -c \
-    --arg cwd "$CWD" \
-    --arg ts "$last_ts" \
-    'select((.cwd | startswith($cwd)) and .timestamp > $ts)' \
+  jq -c --arg ts "$last_ts" 'select(.timestamp > $ts)' \
     "$file" 2>/dev/null | wc -l | tr -d ' '
 }
 
@@ -92,11 +90,11 @@ if [ -f "$CURSOR" ]; then
   LAST_COMMANDS_TS="$(jq -r '.last_commands_review // ""'        "$CURSOR")"
 fi
 
-# ── New events since last review (project-filtered, timestamp-based) ──────────
-NEW_PERMISSIONS="$(count_new "$DATA_DIR/permissions.jsonl" "$LAST_PERMISSIONS_TS")"
-NEW_COMPACTIONS="$(count_new "$DATA_DIR/compactions.jsonl" "$LAST_CONTEXT_TS")"
-NEW_ERRORS="$(count_new      "$DATA_DIR/errors.jsonl"      "$LAST_ERRORS_TS")"
-NEW_READS="$(count_new       "$DATA_DIR/reads.jsonl"        "$LAST_READS_TS")"
+# ── New events since last review ──────────────────────────────────────────────
+NEW_PERMISSIONS="$(count_new "$PROJECT_DIR/permissions.jsonl" "$LAST_PERMISSIONS_TS")"
+NEW_COMPACTIONS="$(count_new "$PROJECT_DIR/compactions.jsonl" "$LAST_CONTEXT_TS")"
+NEW_ERRORS="$(count_new      "$PROJECT_DIR/errors.jsonl"      "$LAST_ERRORS_TS")"
+NEW_READS="$(count_new       "$PROJECT_DIR/reads.jsonl"        "$LAST_READS_TS")"
 
 # ── Unanalyzed sessions for current project ────────────────────────────────────
 TOTAL_SESSIONS=0
@@ -160,7 +158,7 @@ elif [ "$NEW_PERMISSIONS" -gt 0 ] && [ -n "$LAST_PERMISSIONS_TS" ]; then
   DAYS="$(days_since "$LAST_PERMISSIONS_TS")"
   [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_PERMISSIONS=true
 fi
-$INCLUDE_PERMISSIONS && RECOMMENDATIONS+=("/slipstream-permissions   ${NEW_PERMISSIONS} new events")
+$INCLUDE_PERMISSIONS && RECOMMENDATIONS+=("/slipstream-permissions (${NEW_PERMISSIONS} allow-list candidates)")
 
 # Context (compactions)
 INCLUDE_CONTEXT=false
@@ -170,7 +168,7 @@ elif [ "$NEW_COMPACTIONS" -gt 0 ] && [ -n "$LAST_CONTEXT_TS" ]; then
   DAYS="$(days_since "$LAST_CONTEXT_TS")"
   [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_CONTEXT=true
 fi
-$INCLUDE_CONTEXT && RECOMMENDATIONS+=("/slipstream-context        ${NEW_COMPACTIONS} new events")
+$INCLUDE_CONTEXT && RECOMMENDATIONS+=("/slipstream-context (${NEW_COMPACTIONS} compactions)")
 
 # Errors
 INCLUDE_ERRORS=false
@@ -180,7 +178,7 @@ elif [ "$NEW_ERRORS" -gt 0 ] && [ -n "$LAST_ERRORS_TS" ]; then
   DAYS="$(days_since "$LAST_ERRORS_TS")"
   [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_ERRORS=true
 fi
-$INCLUDE_ERRORS && RECOMMENDATIONS+=("/slipstream-errors          ${NEW_ERRORS} new events")
+$INCLUDE_ERRORS && RECOMMENDATIONS+=("/slipstream-errors (${NEW_ERRORS} tool failures)")
 
 # Reads
 INCLUDE_READS=false
@@ -190,7 +188,7 @@ elif [ "$NEW_READS" -gt 0 ] && [ -n "$LAST_READS_TS" ]; then
   DAYS="$(days_since "$LAST_READS_TS")"
   [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_READS=true
 fi
-$INCLUDE_READS && RECOMMENDATIONS+=("/slipstream-reads           ${NEW_READS} new events")
+$INCLUDE_READS && RECOMMENDATIONS+=("/slipstream-reads (${NEW_READS} orientation reads)")
 
 # Corrections
 INCLUDE_CORRECTIONS=false
@@ -200,7 +198,7 @@ elif [ "$UNANALYZED" -gt 0 ] && [ -n "$LAST_CORRECTIONS_TS" ]; then
   DAYS="$(days_since "$LAST_CORRECTIONS_TS")"
   [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_CORRECTIONS=true
 fi
-$INCLUDE_CORRECTIONS && RECOMMENDATIONS+=("/slipstream-corrections    ${UNANALYZED} unanalyzed sessions")
+$INCLUDE_CORRECTIONS && RECOMMENDATIONS+=("/slipstream-corrections (${UNANALYZED} sessions to mine)")
 
 # Memory
 INCLUDE_MEMORY=false
@@ -210,7 +208,7 @@ elif [ "$MEM_UNANALYZED" -gt 0 ] && [ -n "$LAST_MEMORY_TS" ]; then
   DAYS="$(days_since "$LAST_MEMORY_TS")"
   [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_MEMORY=true
 fi
-$INCLUDE_MEMORY && RECOMMENDATIONS+=("/slipstream-memory         ${MEM_UNANALYZED} unanalyzed sessions")
+$INCLUDE_MEMORY && RECOMMENDATIONS+=("/slipstream-memory (${MEM_UNANALYZED} sessions to mine)")
 
 # Commands
 INCLUDE_COMMANDS=false
@@ -220,14 +218,17 @@ elif [ "$CMD_UNANALYZED" -gt 0 ] && [ -n "$LAST_COMMANDS_TS" ]; then
   DAYS="$(days_since "$LAST_COMMANDS_TS")"
   [ "$DAYS" -ge "$TIME_THRESHOLD_DAYS" ] && INCLUDE_COMMANDS=true
 fi
-$INCLUDE_COMMANDS && RECOMMENDATIONS+=("/slipstream-commands       ${CMD_UNANALYZED} unanalyzed sessions")
+$INCLUDE_COMMANDS && RECOMMENDATIONS+=("/slipstream-commands (${CMD_UNANALYZED} sessions to mine)")
 
-# ── Print output ───────────────────────────────────────────────────────────────
+# ── Print one-line summary ─────────────────────────────────────────────────────
 if [ "${#RECOMMENDATIONS[@]}" -gt 0 ]; then
-  echo "[Slipstream] ($(basename "$CWD"))"
+  # Join recommendations with " · "
+  LINE=""
   for rec in "${RECOMMENDATIONS[@]}"; do
-    echo "  $rec"
+    [ -n "$LINE" ] && LINE="${LINE} · "
+    LINE="${LINE}${rec}"
   done
+  printf '[Slipstream] Ready: %s\n' "$LINE"
 fi
 
 exit 0

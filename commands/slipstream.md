@@ -16,17 +16,17 @@ All data in the steps below is SCOPED TO THE CURRENT PROJECT.
 
 ## Step 1: Read logs
 
-Read these files from ~/.slipstream/:
-- permissions.jsonl  — filter to entries where `.cwd` starts with the current project path
-- compactions.jsonl  — same filter
-- errors.jsonl       — same filter
-- reads.jsonl        — same filter
-- corrections-state.json (for analyzed_session_ids; default [])
-- memory-state.json (for analyzed_session_ids for the memory module; default [])
-- commands-state.json (for analyzed_session_ids for the commands module; default [])
-- ~/.slipstream/cursors/<project-key>.json (per-project last-review timestamps)
+Read these files:
+- `~/.slipstream/projects/<project-key>/permissions.jsonl`
+- `~/.slipstream/projects/<project-key>/compactions.jsonl`
+- `~/.slipstream/projects/<project-key>/errors.jsonl`
+- `~/.slipstream/projects/<project-key>/reads.jsonl`
+- `~/.slipstream/corrections-state.json` (for analyzed_session_ids; default [])
+- `~/.slipstream/memory-state.json` (for analyzed_session_ids for the memory module; default [])
+- `~/.slipstream/commands-state.json` (for analyzed_session_ids for the commands module; default [])
+- `~/.slipstream/cursors/<project-key>.json` (per-project last-review timestamps)
 
-Count filtered entries in each jsonl file. Count distinct session_ids among filtered entries.
+Count entries in each jsonl file. Count distinct session_ids among entries.
 
 Count unanalyzed sessions per transcript-scanning module using ONLY sessions under
 `~/.claude/projects/<project-key>/`:
@@ -34,9 +34,9 @@ Count unanalyzed sessions per transcript-scanning module using ONLY sessions und
 - memory-state.json     → unanalyzed sessions for /slipstream-memory
 - commands-state.json   → unanalyzed sessions for /slipstream-commands
 
-"New since review" = count of filtered entries (matching project cwd) with `.timestamp`
-greater than the corresponding `last_*_review` timestamp in the per-project cursor.
-If no cursor exists, all filtered entries are "new".
+"New since review" = count of entries with `.timestamp` greater than the corresponding
+`last_*_review` timestamp in the per-project cursor.
+If no cursor exists, all entries are "new".
 
 ## Step 2: Show dashboard
 

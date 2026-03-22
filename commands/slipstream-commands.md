@@ -25,7 +25,7 @@ All analysis below is SCOPED TO THE CURRENT PROJECT only.
 3. Compute unanalyzed sessions using a set-difference approach:
    ```bash
    ANALYZED=$(jq -r '.analyzed_session_ids[]' ~/.slipstream/commands-state.json 2>/dev/null | sort)
-   ALL=$(find ~/.claude/projects -name '*.jsonl' | xargs -I{} basename {} .jsonl | sort)
+   ALL=$(find ~/.claude/projects/<project-key> -maxdepth 1 -name '*.jsonl' | xargs -I{} basename {} .jsonl | sort)
    UNANALYZED=$(comm -23 <(echo "$ALL") <(echo "$ANALYZED") | wc -l | tr -d ' ')
    ```
    (Use `comm -23` on sorted lists — O(n+m) — rather than checking each stem against the

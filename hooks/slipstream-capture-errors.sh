@@ -6,7 +6,6 @@
 set -euo pipefail
 
 DATA_DIR="$HOME/.slipstream"
-LOG="$DATA_DIR/errors.jsonl"
 
 trap 'exit 0' ERR
 
@@ -22,11 +21,15 @@ INPUT="$(cat)"
 # Validate JSON before extracting fields; logs to errors.log on failure
 _slipstream_validate_json "$INPUT" "$(basename "$0")"
 
-mkdir -p "$DATA_DIR"
-
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // ""')"
 CWD="$(printf '%s' "$INPUT" | jq -r '.cwd // ""')"
+[ -z "$CWD" ] && exit 0
+
+PROJECT_KEY="$(printf '%s' "$CWD" | sed 's|/|-|g')"
+LOG="$DATA_DIR/projects/$PROJECT_KEY/errors.jsonl"
+mkdir -p "$DATA_DIR/projects/$PROJECT_KEY"
+
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
 TOOL_INPUT="$(printf '%s' "$INPUT" | jq -c '.tool_input // {}')"
 
