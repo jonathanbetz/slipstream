@@ -15,6 +15,10 @@ Before reading any data:
 
 All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
+**IMPORTANT: Never implement this logic inline. Always call the pre-built script
+below. If the script is not found, stop and tell the user to run `./install.sh`
+from the slipstream repo — do not write any Python or shell code as a substitute.**
+
 ## Step 1: Run analysis script
 
 ```bash
