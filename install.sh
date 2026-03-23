@@ -107,6 +107,34 @@ CURRENT="$(cat "$SETTINGS")"
 if ! echo "$CURRENT" | jq -e '.hooks' >/dev/null 2>&1; then
   echo "$CURRENT" | jq '. + {"hooks": {}}' > "$SETTINGS"
 fi
+if ! echo "$CURRENT" | jq -e '.permissions' >/dev/null 2>&1; then
+  echo "$(cat "$SETTINGS")" | jq '. + {"permissions": {"allow": []}}' > "$SETTINGS"
+fi
+
+# ── merge_permission() ────────────────────────────────────────────────────────
+# Adds a rule to .permissions.allow only if not already present.
+merge_permission() {
+  local rule="$1"
+  local settings_tmp
+  settings_tmp="$(mktemp)"
+
+  local already_present
+  already_present="$(jq -r --arg rule "$rule" \
+    '(.permissions.allow // []) | map(select(. == $rule)) | length' \
+    "$SETTINGS")"
+
+  if [ "$already_present" -gt 0 ]; then
+    echo "  → permission already present, skipping: $rule"
+    rm -f "$settings_tmp"
+    return
+  fi
+
+  jq --arg rule "$rule" \
+    '.permissions.allow = ((.permissions.allow // []) + [$rule])' \
+    "$SETTINGS" > "$settings_tmp"
+  mv "$settings_tmp" "$SETTINGS"
+  echo "  ✓ permission added: $rule"
+}
 
 # ── merge_hook() ──────────────────────────────────────────────────────────────
 # Usage:
@@ -154,6 +182,12 @@ merge_hook() {
   mv "$settings_tmp" "$SETTINGS"
   echo "  ✓ $event: $(basename "$cmd_path") registered"
 }
+
+# ── Register permissions ──────────────────────────────────────────────────────
+echo ""
+echo "Merging permissions into $SETTINGS ..."
+
+merge_permission "Bash(python3 ~/.claude/hooks/slipstream-*)"
 
 # ── Register hooks ────────────────────────────────────────────────────────────
 echo ""
