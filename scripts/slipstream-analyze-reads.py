@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 slipstream-analyze-reads.py
 Reads the reads JSONL for the current project, groups by file path,

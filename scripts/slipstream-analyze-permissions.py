@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 slipstream-analyze-permissions.py
 Reads the permissions JSONL for the current project, groups by normalized

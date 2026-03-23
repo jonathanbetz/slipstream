@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 slipstream-analyze-corrections.py
 Reads unanalyzed session transcripts for the current project and finds

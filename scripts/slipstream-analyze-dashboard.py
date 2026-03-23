@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 slipstream-analyze-dashboard.py
 Reads all per-project friction logs and state files for the current project

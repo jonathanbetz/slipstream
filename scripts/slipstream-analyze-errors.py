@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 slipstream-analyze-errors.py
 Reads the errors JSONL for the current project, groups repeated tool
