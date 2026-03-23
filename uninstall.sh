@@ -29,7 +29,7 @@ if [ -d "$HOOKS_DIR/slipstream" ]; then
   rm -rf "$HOOKS_DIR/slipstream"
   echo "  ✓ Removed slipstream/ package"
 fi
-for f in "$HOOKS_DIR"/slipstream-analyze-*.py; do
+for f in "$HOOKS_DIR"/slipstream-analyze-*.py "$HOOKS_DIR"/slipstream-dashboard.py; do
   if [ -f "$f" ]; then
     rm -f "$f"
     echo "  ✓ Removed $(basename "$f")"

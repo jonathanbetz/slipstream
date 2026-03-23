@@ -3,44 +3,22 @@
 Show a dashboard of friction captured for the CURRENT PROJECT and recommend
 which focused commands to run.
 
-## Step 0: Determine current project
+## Step 1: Run dashboard script
 
-Before reading any data:
-1. The current project path = the working directory where Claude Code is open (run `pwd` if needed).
-2. Project key = that path with every `/` replaced by `-`
-   (e.g. `/Users/alice/src/myapp` → `-Users-alice-src-myapp`).
-3. Per-project cursor = `~/.slipstream/cursors/<project-key>.json` (default `{}` if missing).
-4. Project sessions directory = `~/.claude/projects/<project-key>/`.
+```bash
+python3 ~/.claude/hooks/slipstream-analyze-dashboard.py
+```
 
-All data in the steps below is SCOPED TO THE CURRENT PROJECT.
-
-## Step 1: Read logs
-
-Read these files:
-- `~/.slipstream/projects/<project-key>/permissions.jsonl`
-- `~/.slipstream/projects/<project-key>/compactions.jsonl`
-- `~/.slipstream/projects/<project-key>/errors.jsonl`
-- `~/.slipstream/projects/<project-key>/reads.jsonl`
-- `~/.slipstream/corrections-state.json` (for analyzed_session_ids; default [])
-- `~/.slipstream/memory-state.json` (for analyzed_session_ids for the memory module; default [])
-- `~/.slipstream/commands-state.json` (for analyzed_session_ids for the commands module; default [])
-- `~/.slipstream/cursors/<project-key>.json` (per-project last-review timestamps)
-
-Count entries in each jsonl file. Count distinct session_ids among entries.
-
-Count unanalyzed sessions per transcript-scanning module using ONLY sessions under
-`~/.claude/projects/<project-key>/`:
-- corrections-state.json → unanalyzed sessions for /slipstream-corrections
-- memory-state.json     → unanalyzed sessions for /slipstream-memory
-- commands-state.json   → unanalyzed sessions for /slipstream-commands
-
-"New since review" = count of entries with `.timestamp` greater than the corresponding
-`last_*_review` timestamp in the per-project cursor.
-If no cursor exists, all entries are "new".
+The script outputs JSON with:
+- `project_key`, `project_cwd`
+- `last_review_ts`, `last_review_days` — days since any module was last reviewed (null if never)
+- `modules` — one entry per module:
+  - `permissions`, `context`, `errors`, `reads` → `{total, new, sessions}`
+  - `corrections`, `memory`, `commands` → `{unanalyzed}`
 
 ## Step 2: Show dashboard
 
-Print a dashboard like this:
+Print a dashboard using the script output:
 
 ```
 Slipstream
@@ -55,27 +33,23 @@ Slipstream
   Memory          -                  -        4 unanalyzed
   Commands        -                  -        5 unanalyzed
 
-  Last review: 4 days ago  (or "never" if last_review_timestamp is absent)
+  Last review: 4 days ago  (or "never" if last_review_days is null)
 ```
 
-"New since review" for Corrections, Memory, and Commands = count of unanalyzed sessions
-(not a line count). Show "-" for these modules in the Total and Sessions columns; show
-the unanalyzed count in the Sessions column with the label "unanalyzed".
-
-"Last review" is computed from last_review_timestamp in .cursor.json. If no such key
-exists, show "never".
+For Corrections, Memory, and Commands: show `-` in New and Total columns;
+show the `unanalyzed` count in the Sessions column with the label "unanalyzed".
 
 ## Step 3: Recommend commands
 
-Based on the counts above, print specific recommendations:
+Based on the output, print specific recommendations:
 
-- Permissions new >= 5        →  suggest /slipstream-permissions
-- Context (compactions) new >= 3  →  suggest /slipstream-context
-- Errors new >= 3             →  suggest /slipstream-errors
-- Reads new >= 10             →  suggest /slipstream-reads
-- Corrections unanalyzed >= 2 →  suggest /slipstream-corrections
-- Memory unanalyzed >= 2      →  suggest /slipstream-memory
-- Commands unanalyzed >= 3    →  suggest /slipstream-commands
+- `permissions.new` >= 5        →  suggest /slipstream-permissions
+- `context.new` >= 3            →  suggest /slipstream-context
+- `errors.new` >= 3             →  suggest /slipstream-errors
+- `reads.new` >= 10             →  suggest /slipstream-reads
+- `corrections.unanalyzed` >= 2 →  suggest /slipstream-corrections
+- `memory.unanalyzed` >= 2      →  suggest /slipstream-memory
+- `commands.unanalyzed` >= 3    →  suggest /slipstream-commands
 
 Example output:
 
