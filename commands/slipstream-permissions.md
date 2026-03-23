@@ -16,18 +16,26 @@ Before reading any data:
 
 All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
-## Step 1: Mini-dashboard
+## Step 1: Run analysis script
 
-Load `~/.slipstream/projects/<project-key>/permissions.jsonl`. Load the per-project cursor.
+```bash
+python3 ~/.claude/hooks/slipstream-analyze-permissions.py
+```
 
-Show:
-- Total entries (line count for this project)
-- New since last review: count of entries with `.timestamp` > `last_permissions_review`
-  in per-project cursor (if no cursor, all entries are "new")
-- Date range (earliest and latest timestamp among entries)
+The script outputs JSON with:
+- `total`, `new_since_review`, `earliest`, `latest`
+- `patterns` — list of `{tool_name, normalized_pattern, session_count, sessions, count, last_seen, raw_commands, allow_list_candidate}` objects
+- `native_tool_candidates` — list of `{bash_cmd, native_tool, session_count}` objects
 
-If the file is empty or missing, say:
+Show the mini-dashboard:
+```
+Permissions module
+  Total entries:       <total>
+  New since review:    <new_since_review>
+  Date range:          <earliest> → <latest>
+```
 
+If `total` is 0, say:
 > No permission data captured yet. Run a few Claude Code sessions and check back.
 
 Stop here — do not proceed to analysis.
@@ -36,61 +44,34 @@ Stop here — do not proceed to analysis.
 
 ## Step 2: Analysis
 
-Run all three analyses before presenting anything.
+Use the script output directly — no additional data extraction needed.
 
 ### A. Allow-list candidates
 
-Group entries by {project, normalized_pattern}:
-- project = cwd path relative to $HOME (e.g. "src/myapp" from "/Users/alice/src/myapp").
-  Use the full relative path — never basename alone — to avoid collisions across projects
-  that share a directory name.
-- normalized_pattern = normalize Bash commands by stripping variable arguments:
-  - Replace quoted strings, file paths, and version numbers with *
-  - If a command varies across sessions in its arguments, append * to the base command
-  - Example: `npm install lodash` and `npm install react` → `npm install *`
-  - Example: `git commit -m "fix bug"` → `git commit *`
-  - Keep commands that are always identical as-is
+From `patterns`, select entries where `allow_list_candidate` is true (session_count >= 3).
+Cross-project candidates: check `~/.slipstream/projects/*/permissions.jsonl` if you want
+to flag patterns appearing across multiple projects.
 
-Flag a {project, normalized_pattern} as an allow-list candidate if ALL are true:
-- Appears in 3 or more distinct sessions (session_count >= 3)
-- Not already present in ~/.claude/settings.json or the project's .claude/settings.json allow list
-- The command looks safe (not rm -rf, not destructive system commands)
-
-Cross-project candidates: if the same normalized pattern appears in 2+ distinct projects
-with session_count >= 2 each, flag it as a global ~/.claude/settings.json candidate.
-Iterate over `~/.slipstream/projects/*/permissions.jsonl` for cross-project analysis.
-
-Score each candidate: session_count × recency_weight, where recency_weight = 1.5 if last
-seen within 30 days, else 1.0. Sort candidates by score descending.
+Score each candidate: session_count × recency_weight, where recency_weight = 1.5 if
+last_seen within 30 days, else 1.0. Sort by score descending.
 
 ### B. Native tool substitutions
 
-Look for Bash commands that Claude Code has a native equivalent for:
-- grep / grep -r / rg  →  Grep tool
-- find / ls            →  Glob tool
-- cat / head / tail    →  Read tool
-- echo > file / tee    →  Write tool
-- sed -i               →  Edit tool
+From `native_tool_candidates`, flag each for a CLAUDE.md note:
+"Prefer [NativeTool] over [bashcmd] for [purpose]."
 
-If a native-substitute command appears in 2+ sessions in the same project, flag it for a
-CLAUDE.md note: "Prefer [NativeTool] over [bashcmd] for [purpose]."
-
-Only flag if not already noted in that project's CLAUDE.md.
+Only flag if not already noted in the project's CLAUDE.md.
 
 ### C. Script opportunities
 
-Look for:
-- Session clusters: 3+ Bash permission requests within 15 minutes in the same session,
-  where the cluster pattern repeats across 2+ sessions → suggest a reusable script
-- Repeated complex commands: same command in 4+ sessions, OR any command longer than 60
-  characters in 2+ sessions → suggest a script
-- Cross-project duplicates: same cluster pattern in 2+ projects → suggest a ~/bin/ script
+From `patterns`, look for:
+- Commands longer than 60 characters appearing in 2+ sessions → suggest a script
+- 3+ patterns with the same tool appearing in the same sessions (cluster) → suggest a script
 
 For each script opportunity, propose:
 - Script name and location (project scripts/, ~/.claude/hooks/, or ~/bin/)
 - Script content derived from the distinct commands in the cluster
-- A single allow-list entry that covers the script, replacing the individual entries
-- Whether a slash command wrapper makes sense
+- A single allow-list entry that covers the script
 
 ---
 

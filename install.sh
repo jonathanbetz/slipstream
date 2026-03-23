@@ -79,6 +79,14 @@ rm -rf "$HOOKS_DIR/slipstream"
 cp -r "$SCRIPT_DIR/hooks/slipstream" "$HOOKS_DIR/slipstream"
 echo "  ✓ slipstream/ package"
 
+echo "Copying analysis scripts to $HOOKS_DIR ..."
+for script in "$SCRIPT_DIR"/scripts/slipstream-analyze-*.py; do
+  dest="$HOOKS_DIR/$(basename "$script")"
+  cp "$script" "$dest"
+  chmod +x "$dest"
+  echo "  ✓ $(basename "$script")"
+done
+
 # ── Copy commands (global only — commands are always available everywhere) ────
 if ! $PROJECT_MODE; then
   echo ""

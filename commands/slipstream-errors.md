@@ -14,18 +14,26 @@ Before reading any data:
 
 All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
-## Step 1: Mini-dashboard
+## Step 1: Run analysis script
 
-Load `~/.slipstream/projects/<project-key>/errors.jsonl`. Load the per-project cursor.
+```bash
+python3 ~/.claude/hooks/slipstream-analyze-errors.py
+```
 
-Show:
-- Total entries (errors for this project)
-- New since last review: count of entries with `.timestamp` > `last_errors_review`
-  in per-project cursor (if no cursor, all entries are "new")
-- Distinct tools involved (distinct tool_name values among entries)
+The script outputs JSON with:
+- `total`, `new_since_review`, `distinct_tools`
+- `patterns` — list of `{tool_name, normalized_command, count, session_count, sessions, last_seen, raw_commands, systemic}` objects
+  (only patterns with 2+ sessions are included)
 
-If the file is empty or missing, say:
+Show the mini-dashboard:
+```
+Errors module
+  Total entries:       <total>
+  New since review:    <new_since_review>
+  Distinct tools:      <distinct_tools joined by ", ">
+```
 
+If `total` is 0, say:
 > No error data captured yet. Tool failures are logged when a hook or tool call exits
 > non-zero. Run a few Claude Code sessions and check back.
 
@@ -35,26 +43,17 @@ Stop here — do not proceed to analysis.
 
 ## Step 2: Analysis
 
-**Group by pattern:** Group entries by {project, tool_name, normalized_command}:
-- project = cwd path relative to $HOME (e.g. "src/myapp" from "/Users/alice/src/myapp").
-  Use the full relative path — never basename alone — to avoid collisions across projects
-  that share a directory name.
-- tool_name = the tool_name field from the log entry
-- normalized_command = for Bash failures, the executable and subcommand (e.g. "npm run e2e",
-  not the full argument list); for other tools (Edit, Write, etc.), use tool_name alone
-
-**Flag repeated failures:** Flag any {project, tool_name, normalized_command} with 2 or
-more failures. Prioritize patterns with 4+ failures — these are systemic.
+Use the `patterns` array from the script output directly. Each entry is a repeated failure
+pattern (2+ sessions). `systemic` is true for patterns with 4+ failures.
 
 **Diagnose each pattern:**
-- Bash failures: examine the command for clues:
+- Bash failures: examine `raw_commands` for clues:
   - Missing binary → note the install command
   - Wrong path → note the correct path or how to find it
   - Missing env var → note which variable and where to set it
   - Needs sudo → note if elevated privileges are required
   - Needs a running service → note the startup command
-- Edit/Write failures: may indicate path or permission issues — note the correct path
-  convention or required permissions
+- Edit/Write failures: may indicate path or permission issues
 
 ---
 

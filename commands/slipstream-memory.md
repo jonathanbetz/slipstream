@@ -19,29 +19,28 @@ Before reading any data:
 
 All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
-## Mini-dashboard
+## Step 1: Run analysis script
 
-1. List all `*.jsonl` files under `~/.claude/projects/<project-key>/` only (not all projects) and collect their stems.
-2. Read `analyzed_session_ids` from `~/.slipstream/memory-state.json` (default `[]`).
-3. Compute unanalyzed sessions using a set-difference approach:
-   ```bash
-   ANALYZED=$(jq -r '.analyzed_session_ids[]' ~/.slipstream/memory-state.json 2>/dev/null | sort)
-   ALL=$(find ~/.claude/projects/<project-key> -maxdepth 1 -name '*.jsonl' | xargs -I{} basename {} .jsonl | sort)
-   UNANALYZED=$(comm -23 <(echo "$ALL") <(echo "$ANALYZED") | wc -l | tr -d ' ')
-   ```
-   (Use `comm -23` on sorted lists — O(n+m) — rather than checking each stem against the
-   full array, which is O(n×m).)
-4. Print:
-   ```
-   Memory module
-     Total sessions:      N
-     Already analyzed:    M
-     Unanalyzed:          K
-   ```
-5. If unanalyzed < 2, say: "Not enough new sessions to analyze yet. Check back after a
-   few more sessions." and stop.
+```bash
+python3 ~/.claude/hooks/slipstream-analyze-memory.py
+```
 
-## Step 1: Find the memory system
+The script outputs JSON with:
+- `total_sessions`, `already_analyzed`, `unanalyzed_count`, `unanalyzed_session_ids`
+- `signals` — list of `{session_id, signal_type, matched, context}` objects
+
+Show the mini-dashboard:
+```
+Memory module
+  Total sessions:      <total_sessions>
+  Already analyzed:    <already_analyzed>
+  Unanalyzed:          <unanalyzed_count>
+```
+
+If `unanalyzed_count` < 2, say: "Not enough new sessions to analyze yet. Check back after a
+few more sessions." and stop.
+
+## Step 2: Find the memory system
 
 Look for MEMORY.md in these locations, in order:
 1. `~/.claude/memory/MEMORY.md`
@@ -53,48 +52,21 @@ Also read any existing memory files it references.
 
 If not found, note that no memory system exists yet — proposals will include creating it.
 
-## Step 2: Read unanalyzed transcripts
+## Step 3: Cluster findings
 
-For each unanalyzed session transcript (a `*.jsonl` file not in `analyzed_session_ids`),
-read it line by line. Each line is a JSON object with at least `role` and `content` fields.
+Use the `signals` array from the script output. Each entry has a `signal_type` of:
+- `role` — user's job, expertise, or background
+- `feedback` — how the user likes Claude to work
+- `user` — knowledge signals (what they know well vs. what they're new to)
 
-Look for **user-level signals** — facts about the person, not the project:
+Group signals of the same type and deduplicate against existing memory files.
 
-- **Role/identity signals**: user stating their job, expertise, or background
-  ("I'm a VC", "I'm the founder", "I've been writing Go for 10 years")
-- **Preference signals**: how the user likes Claude to work
-  ("keep responses short", "don't add comments", "always show the plan first")
-- **Knowledge signals**: what the user knows well vs. what they're new to
-  ("I know Python but this is my first TypeScript project")
-- **Correction signals**: user correcting Claude's assumption about who they are or how
-  they like to work (NOT project-specific corrections — those belong in the corrections
-  module)
-- **Context-setting patterns**: user providing the same background at the start of
-  multiple sessions ("as someone who runs a VC fund...")
-- **Feedback patterns**: user repeatedly approving or rejecting the same types of
-  Claude behavior
-
-## Step 2b: Distinguish user-level from project-level
-
-Only flag facts that:
+Only keep facts that:
 - Describe the USER (their role, expertise, preferences, working style)
 - Would be useful across ALL projects, not just one
 - Are not already captured in existing memory files
 
-Skip facts that:
-- Describe the codebase, architecture, or conventions (those belong in CLAUDE.md)
-- Are one-time corrections about a specific task
-- Are too specific to one project
-
-## Step 3: Cluster findings
-
-Group by memory type:
-- `user` — role, background, expertise
-- `feedback` — preferences about how Claude should behave
-- `project` — cross-cutting project context (only if genuinely cross-project)
-- `reference` — pointers to external systems the user references repeatedly
-
-Deduplicate: if a fact is already in an existing memory file, skip it.
+Skip facts that describe the codebase, architecture, or conventions.
 
 ## Step 4: Present plan
 

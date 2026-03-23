@@ -16,34 +16,34 @@ Before reading any data:
 
 All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
-## Step 1: Mini-dashboard
+## Step 1: Run analysis script
 
-- List all *.jsonl files under `~/.claude/projects/<project-key>/` only (not all projects) and collect their stems (filename
-  without extension).
-- Load ~/.slipstream/corrections-state.json — get analyzed_session_ids (default []).
-- Compute unanalyzed sessions efficiently using a set-difference approach:
-  ```bash
-  ANALYZED=$(jq -r '.analyzed_session_ids[]' ~/.slipstream/corrections-state.json 2>/dev/null | sort)
-  ALL=$(find ~/.claude/projects/<project-key> -maxdepth 1 -name '*.jsonl' | xargs -I{} basename {} .jsonl | sort)
-  UNANALYZED=$(comm -23 <(echo "$ALL") <(echo "$ANALYZED") | wc -l | tr -d ' ')
-  ```
-  (Use `comm -23` on sorted lists — O(n+m) — rather than iterating each stem against the
-  full array, which is O(n×m).)
-- Show:
-  - Total session files found
-  - Unanalyzed count
-  - Projects covered (distinct cwd paths relative to $HOME from the path under ~/.claude/projects/)
+```bash
+python3 ~/.claude/hooks/slipstream-analyze-corrections.py
+```
 
-If no unanalyzed sessions exist, say:
+The script outputs JSON with:
+- `total_sessions` — all session files found for this project
+- `already_analyzed` — sessions already processed
+- `unanalyzed_count` — sessions not yet analyzed
+- `unanalyzed_session_ids` — list of session IDs to process
+- `corrections` — list of `{session_id, assistant_text, correction_text, keywords}` objects
 
+Show the mini-dashboard:
+```
+Corrections module
+  Total sessions:      <total_sessions>
+  Already analyzed:    <already_analyzed>
+  Unanalyzed:          <unanalyzed_count>
+```
+
+If `unanalyzed_count` is 0, say:
 > All sessions analyzed. Nothing new to review.
 
 Stop here.
 
-If fewer than 2 unanalyzed sessions exist, say:
-
-> Only N unanalyzed session(s) — below the threshold of 2. Check back after a few more
-> sessions.
+If `unanalyzed_count` < 2, say:
+> Only N unanalyzed session(s) — below the threshold of 2. Check back after a few more sessions.
 
 Stop here.
 
@@ -51,41 +51,22 @@ Stop here.
 
 ## Step 2: Analysis
 
-Read each unanalyzed transcript (*.jsonl file). Skip transcripts with fewer than 4 turns
-(too short to contain meaningful corrections). Each line in a transcript is a JSON object
-with a role field ("user" or "assistant") and content.
+Use the `corrections` array from the script output. Each entry is a user turn that
+followed an assistant turn and contained correction language.
 
-**Identify correction turns:** A user turn that follows an assistant turn and contains:
-- Explicit negation: "no", "don't", "stop", "wait", "actually", "that's not", "that's wrong"
-- Redirection: "instead", "rather", "what I meant", "I said", "I meant"
-- Undo requests: "revert", "undo", "go back", "remove what you just"
-- Re-statement of the original request with modifications implying the first response missed
-  the mark
-
-For each correction found, record:
-- project: cwd path relative to $HOME (e.g. "src/myapp"), derived from the directory
-  path under ~/.claude/projects/. Never use basename alone — use the full relative path.
-- session_id: the transcript filename without extension
-- assistant_turn: the assistant message that was corrected (first 300 chars)
-- correction: the user's correction turn (first 300 chars)
-- theme: briefly what the correction was about
-
-**Group and classify:** After collecting corrections across all unanalyzed transcripts:
-- Group by project
-- Look for recurring themes: same type of correction in 2+ sessions for the same project
-- Classify each theme:
-  - convention — code style, naming, formatting the assistant kept getting wrong
-  - scope — doing too much, too little, or touching wrong files
-  - workflow — wrong order of operations, skipped steps
-  - architecture — structural decisions, where things belong
-  - domain — facts about the project the assistant didn't know
+**Group and classify:** Group by recurring themes across sessions:
+- convention — code style, naming, formatting the assistant kept getting wrong
+- scope — doing too much, too little, or touching wrong files
+- workflow — wrong order of operations, skipped steps
+- architecture — structural decisions, where things belong
+- domain — facts about the project the assistant didn't know
 
 **Generate mitigations:**
 - Recurring themes (2+ sessions):
   - convention / workflow / scope → a .claude/rules/<slug>.md file with a clear rule
   - architecture / domain → an addition to the appropriate CLAUDE.md
 - One-off corrections: only include if 3+ one-offs can be grouped into a coherent broader
-  rule; otherwise skip (too noisy to act on)
+  rule; otherwise skip
 
 **Identify the right file location for each mitigation:**
 - Project-wide rules → .claude/rules/<slug>.md in the project root

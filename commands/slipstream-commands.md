@@ -18,30 +18,29 @@ Before reading any data:
 
 All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
-## Mini-dashboard
+## Step 1: Run analysis script
 
-1. List all `*.jsonl` files under `~/.claude/projects/<project-key>/` only (not all projects) and collect their stems.
-2. Read `analyzed_session_ids` from `~/.slipstream/commands-state.json` (default `[]`).
-3. Compute unanalyzed sessions using a set-difference approach:
-   ```bash
-   ANALYZED=$(jq -r '.analyzed_session_ids[]' ~/.slipstream/commands-state.json 2>/dev/null | sort)
-   ALL=$(find ~/.claude/projects/<project-key> -maxdepth 1 -name '*.jsonl' | xargs -I{} basename {} .jsonl | sort)
-   UNANALYZED=$(comm -23 <(echo "$ALL") <(echo "$ANALYZED") | wc -l | tr -d ' ')
-   ```
-   (Use `comm -23` on sorted lists — O(n+m) — rather than checking each stem against the
-   full array, which is O(n×m).)
-4. Print:
-   ```
-   Commands module
-     Total sessions:      N
-     Already analyzed:    M
-     Unanalyzed:          K
-   ```
-5. If unanalyzed < 3, say: "Not enough new sessions to analyze yet. Need at least 3
-   unanalyzed sessions to find reliable patterns. Check back after a few more sessions."
-   and stop.
+```bash
+python3 ~/.claude/hooks/slipstream-analyze-commands.py
+```
 
-## Step 1: Find existing commands
+The script outputs JSON with:
+- `total_sessions`, `already_analyzed`, `unanalyzed_count`, `unanalyzed_session_ids`
+- `sessions` — list of `{session_id, opening_task, pivots, turn_count}` objects
+
+Show the mini-dashboard:
+```
+Commands module
+  Total sessions:      <total_sessions>
+  Already analyzed:    <already_analyzed>
+  Unanalyzed:          <unanalyzed_count>
+```
+
+If `unanalyzed_count` < 3, say: "Not enough new sessions to analyze yet. Need at least 3
+unanalyzed sessions to find reliable patterns. Check back after a few more sessions."
+and stop.
+
+## Step 2: Find existing commands
 
 List all `*.md` files in:
 - `~/.claude/commands/`
@@ -50,16 +49,10 @@ List all `*.md` files in:
 Read each file to understand what workflows are already covered. Keep a list of covered
 command names and their purposes so duplicates can be skipped.
 
-## Step 2: Read transcripts
-
-For each unanalyzed session transcript, extract:
-- The user's FIRST message of the session (the task they opened with)
-- Any major task pivots — new substantial requests made mid-session, identifiable by
-  the user sending a long message after Claude has already responded several times
-
-Build a list of: `{session_id, project, opening_task, task_summary}`
-
 ## Step 3: Find repeated workflow patterns
+
+Use the `sessions` array from the script output. Each entry has an `opening_task` (the
+user's first message) and optional `pivots` (major mid-session task changes).
 
 Group tasks by semantic similarity across sessions. Look for:
 

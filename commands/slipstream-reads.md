@@ -15,18 +15,26 @@ Before reading any data:
 
 All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
-## Step 1: Mini-dashboard
+## Step 1: Run analysis script
 
-Load `~/.slipstream/projects/<project-key>/reads.jsonl`. Load the per-project cursor.
+```bash
+python3 ~/.claude/hooks/slipstream-analyze-reads.py
+```
 
-Show:
-- Total entries (reads for this project)
-- New since last review: count of entries with `.timestamp` > `last_reads_review`
-  in per-project cursor (if no cursor, all entries are "new")
-- Distinct files tracked (distinct file_path values among entries)
+The script outputs JSON with:
+- `total`, `new_since_review`, `distinct_files`
+- `orientation_files` — list of `{file_path, session_count, sessions, tool_names}` objects
+  for files read in 3+ distinct sessions, sorted by priority then session_count
 
-If the file is empty or missing, say:
+Show the mini-dashboard:
+```
+Reads module
+  Total entries:       <total>
+  New since review:    <new_since_review>
+  Distinct files:      <distinct_files>
+```
 
+If `total` is 0, say:
 > No read data captured yet. File reads are logged when Claude uses the Read or Glob
 > tools. Run a few Claude Code sessions and check back.
 
@@ -36,17 +44,8 @@ Stop here — do not proceed to analysis.
 
 ## Step 2: Analysis
 
-**Find orientation reads:** Group entries by {project, file_path}.
-
-Flag any {project, file_path} pair that appears across 3 or more distinct sessions
-(distinct session_id values). These are "orientation reads" — files Claude repeatedly
-reads at the start of sessions to understand the project.
-
-**Prioritize by session frequency (most re-read first).** Within the same count, prefer:
-1. CLAUDE.md files (re-reading context files is especially wasteful)
-2. README files
-3. Architecture or design documents
-4. Configuration files that change rarely
+Use the `orientation_files` array from the script output directly. These are files read
+across 3+ distinct sessions and are the candidates for CLAUDE.md summarization.
 
 **For each orientation file, propose:**
 - Read the source file

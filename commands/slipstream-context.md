@@ -14,17 +14,27 @@ Before reading any data:
 
 All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
-## Step 1: Mini-dashboard
+## Step 1: Run analysis script
 
-Load `~/.slipstream/projects/<project-key>/compactions.jsonl`. Load the per-project cursor.
+```bash
+python3 ~/.claude/hooks/slipstream-analyze-context.py
+```
 
-Show:
-- Total entries (compactions for this project)
-- New since last review: count of entries with `.timestamp` > `last_context_review`
-  in per-project cursor (if no cursor, all entries are "new")
+The script outputs JSON with:
+- `total`, `new_since_review`, `distinct_sessions`
+- `sessions` — list of `{session_id, count, first, last, cwds, multi_compaction}` objects
+- `high_compaction_sessions` — session IDs with 2+ compactions
+- `has_high_compaction` — true if total >= 3 or any multi-compaction sessions exist
 
-If the file is empty or missing, say:
+Show the mini-dashboard:
+```
+Context module
+  Total compactions:   <total>
+  New since review:    <new_since_review>
+  Sessions affected:   <distinct_sessions>
+```
 
+If `total` is 0, say:
 > No compaction data captured yet. Compactions are logged when Claude's context window fills.
 > Run a few longer Claude Code sessions and check back.
 
@@ -34,19 +44,12 @@ Stop here — do not proceed to analysis.
 
 ## Step 2: Analysis
 
-**Group by project:** Group compaction events by project using the cwd path relative to
-$HOME (e.g. "src/myapp" from "/Users/alice/src/myapp"). Use the full relative path —
-never basename alone — to avoid collisions across projects that share a directory name.
+Use the script output directly.
 
 **Flag high-compaction projects:**
-- 3 or more total compaction events for the same project, OR
-- 2 or more compactions within a single session (same session_id) — this indicates tasks
-  that exhaust context repeatedly
+- `has_high_compaction` is true (3+ total, or 2+ in a single session)
 
-For same-session multiple compactions, note the session_id and approximate time range
-(earliest and latest timestamp in that session).
-
-**For each flagged project, propose one or more improvements:**
+**For the project, propose one or more improvements:**
 
 1. If the project has no architecture overview section in its CLAUDE.md:
    - Propose adding one — a section summarizing the key facts Claude needs to orient itself
@@ -54,14 +57,14 @@ For same-session multiple compactions, note the session_id and approximate time 
    - The overview should cover: project purpose, major modules/directories, key conventions,
      entry points
 
-2. If there were same-session multiple compactions (2+):
+2. If `high_compaction_sessions` is non-empty (2+ compactions in a single session):
    - Propose adding a working-style note to CLAUDE.md: "Break large tasks into focused
      sessions — prefer smaller commits over marathon sessions."
 
-3. If compactions are concentrated in a specific subdirectory (same cwd subdirectory across
-   multiple events):
-   - Propose adding targeted context about that area to the nearest ancestor CLAUDE.md in
-     that subdirectory
+3. If compactions are concentrated in sessions with a specific subdirectory cwd (visible
+   in the `cwds` field of high-compaction sessions):
+   - Propose adding targeted context about that area to the nearest ancestor CLAUDE.md
+     in that subdirectory
 
 ---
 
