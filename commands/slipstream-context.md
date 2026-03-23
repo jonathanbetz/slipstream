@@ -14,9 +14,10 @@ Before reading any data:
 
 All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
-**IMPORTANT: Never implement this logic inline. Always call the pre-built script
-below. If the script is not found, stop and tell the user to run `./install.sh`
-from the slipstream repo — do not write any Python or shell code as a substitute.**
+**CRITICAL RULES — READ BEFORE PROCEEDING:**
+1. Run the pre-built script exactly as shown below. Do not write Python or shell code as a substitute.
+2. Read the JSON output directly. Do not pipe it through `python3 -c`, `jq`, or any other command to extract fields — parse it in your head.
+3. If the script is not found, stop and tell the user to run `./install.sh` from the slipstream repo.
 
 ## Step 1: Run analysis script
 
