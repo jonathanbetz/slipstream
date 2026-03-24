@@ -137,6 +137,8 @@ def main():
     result = {
         "project_key": project_key,
         "project_cwd": cwd,
+        "since": args.since,
+        "since_ts": since_ts,
         "last_review_ts": last_review_ts,
         "last_review_days": last_review_days,
         "modules": {

@@ -106,9 +106,23 @@ def parse_session(path: Path) -> dict:
     }
 
 
+
+def parse_since(value: str) -> str:
+    """Parse a duration string like '7d', '6h', '30m' into an ISO timestamp."""
+    import re as _re
+    from datetime import datetime, timedelta, timezone
+    m = _re.fullmatch(r"(\d+)([dhm])", value.strip().lower())
+    if not m:
+        raise ValueError(f"Invalid --since value {value!r}. Use e.g. 7d, 6h, 30m.")
+    amount, unit = int(m.group(1)), m.group(2)
+    delta = {"d": timedelta(days=amount), "h": timedelta(hours=amount), "m": timedelta(minutes=amount)}[unit]
+    return (datetime.now(timezone.utc) - delta).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cwd", default=os.getcwd())
+    parser.add_argument("--since", default=None, help="Override cursor: treat events newer than this window as new (e.g. 7d, 6h, 30m)")
     args = parser.parse_args()
 
     cwd = args.cwd

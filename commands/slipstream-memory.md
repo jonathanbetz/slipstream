@@ -26,8 +26,10 @@ All analysis below is SCOPED TO THE CURRENT PROJECT only.
 
 ## Step 1: Run analysis script
 
+If the user provided a time argument (e.g. `7d`, `6h`), pass it as `--since <argument>`. Otherwise omit the flag.
+
 ```bash
-python3 ~/.claude/hooks/slipstream-analyze-memory.py
+python3 ~/.claude/hooks/slipstream-analyze-memory.py [--since DURATION]
 ```
 
 The script outputs JSON with:

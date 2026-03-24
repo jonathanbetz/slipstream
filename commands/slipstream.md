@@ -50,12 +50,14 @@ show the `unanalyzed` count in the Sessions column with the label "unanalyzed".
 
 ## Step 3: Recommend commands
 
-Based on the output, print specific recommendations:
+Based on the output, print specific recommendations. If `since` is non-null in
+the JSON output, append the same duration to each suggested command
+(e.g. `/slipstream-permissions 7d`) so the module command reviews the same window.
 
-- `permissions.new` >= 5        →  suggest /slipstream-permissions
-- `context.new` >= 3            →  suggest /slipstream-context
-- `errors.new` >= 3             →  suggest /slipstream-errors
-- `reads.new` >= 10             →  suggest /slipstream-reads
+- `permissions.new` >= 5        →  suggest /slipstream-permissions [DURATION]
+- `context.new` >= 3            →  suggest /slipstream-context [DURATION]
+- `errors.new` >= 3             →  suggest /slipstream-errors [DURATION]
+- `reads.new` >= 10             →  suggest /slipstream-reads [DURATION]
 - `corrections.unanalyzed` >= 2 →  suggest /slipstream-corrections
 - `memory.unanalyzed` >= 2      →  suggest /slipstream-memory
 - `commands.unanalyzed` >= 3    →  suggest /slipstream-commands
