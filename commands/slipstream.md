@@ -10,8 +10,11 @@ which focused commands to run.
 
 ## Step 1: Run dashboard script
 
+If the user provided a time argument (e.g. `/slipstream 7d` or `/slipstream 6h`),
+pass it as `--since <argument>`. Otherwise omit the flag.
+
 ```bash
-python3 ~/.claude/hooks/slipstream-analyze-dashboard.py
+python3 ~/.claude/hooks/slipstream-analyze-dashboard.py [--since DURATION]
 ```
 
 The script outputs JSON with:
@@ -39,6 +42,7 @@ Slipstream
   Commands        -                  -        5 unanalyzed
 
   Last review: 4 days ago  (or "never" if last_review_days is null)
+              If --since was used, show: "Showing last <DURATION>" instead
 ```
 
 For Corrections, Memory, and Commands: show `-` in New and Total columns;
